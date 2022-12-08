@@ -1,6 +1,6 @@
-# phywire
+# lovr-phywire
 
-A library for visualizing and debugging [LÖVR](https://lovr.org/) physics.
+Library for visualizing and debugging [LÖVR](https://lovr.org/) physics.
 
 In LÖVR framework the rendering is completely decoupled from phyisics simulation. User should query the physics sim for position and orientation of each collider (and each shape inside each collider) and render everything themselves. This library makes it easy to start of physical projects with simple rendering of each shape type with corresponding graphical primitive.
 
@@ -22,6 +22,8 @@ Aside from simple rendering of colliders, the library can visualize the physical
 * show angular velocity gizmos for each collider
 * visualize the joints between colliders
 * show information on collision contacts
+
+![slideshow](slideshow.gif)
 
 ## Customization
 
