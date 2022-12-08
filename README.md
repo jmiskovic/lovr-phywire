@@ -2,7 +2,7 @@
 
 Library for visualizing and debugging [LÖVR](https://lovr.org/) physics.
 
-In LÖVR framework the rendering is completely decoupled from phyisics simulation. User should query the physics sim for position and orientation of each collider (and each shape inside each collider) and render everything themselves. This library makes it easy to start of physical projects with simple rendering of each shape type with corresponding graphical primitive.
+In LÖVR framework the rendering is completely decoupled from phyisics simulation. User should query the physics sim for position and orientation of each collider (and each shape inside each collider) and render everything themselves. This library makes it easy to render any project that uses physics, and also helps with finding issues in rigging of colliders and joints.
 
 ```Lua
 phywire = require 'phywire'
@@ -17,9 +17,9 @@ end
 
 Aside from simple rendering of colliders, the library can visualize the physical simulation in various ways:
 
-* draw wireframe shapes over existing rendered scene
-* draw velocity vectors for each collider
-* show angular velocity gizmos for each collider
+* draw wireframe shapes over previously rendered scene
+* draw velocity vectors for each moving collider
+* show angular velocity gizmos around each collider
 * visualize the joints between colliders
 * show information on collision contacts
 
@@ -41,13 +41,17 @@ phywire.draw(pass, world, {
 })
 ```
 
-The `wireframe` flag is used to render shapes in wireframe mode. The `overdraw` flag disables the depth buffer test. This allows for useful combinations
+The `wireframe` flag is used to render shapes in wireframe mode. The `overdraw` flag disables the depth buffer test. This allows for some useful combinations.
 
 * `{wireframe=false, overdraw=false}` draws solid geometry, provides quick and simple replacement for rendering of "physical" scene
 * `{wireframe=true, overdraw=true}` renders on top of already drawn scene, this allows users to make sure their rendering is aligned with the physics state
-* `{wireframe=true, overdraw=false}` still renders visualizations but respects existing scene geometry (visuals introduce less noise)
+* `{wireframe=true, overdraw=false}` renders wireframe visualizations but respects existing scene geometry (visuals introduce less noise, useable for VR)
 
-The library will assign a permanent color to each encountered shape from preselected palette. This is just convenience function for quickly throwing something onto the screen. Users can opt for their own color in two ways. They can override `shapes_palette` table in `options` with their own set of colors, without any control over what color is chosen for each shape. They can also specify individual colors while creating each shape inside each collider, and provide a map of shape colors into `shape_colors` table in `options`. Keys of this table are individual shapes, values are the colors used for that shape (either in `{r,g,b}` or hexcode format).
+The library will assign a permanent color to each encountered shape from preselected palette. This is just convenience function for quickly throwing something onto the screen. Users can opt for their own color schemes in two ways.
+
+The default palette can be replaced by providing own `shapes_palette` table in `options` with custom set of colors. There is almost no control over what color is chosen for each shape (they will be chosen sequentially).
+
+User can also specify individual colors while creating each shape inside each collider, and provide a map of shape colors into `shape_colors` table in `options`. Keys of this table are individual shapes, values are the colors used for that shape (either in `{r,g,b}` or hexcode format).
 
 Various other options can be overriden, things like the scaling of each visualization type, sensitivities, and gizmo colors. Check the `m.options` table for more info.
 
