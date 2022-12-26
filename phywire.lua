@@ -64,16 +64,15 @@ m.render_shapes = { -- options preset for drawing filled shapes only
 m.next_color_index = 1 -- index of last chosen palette color
 m.shown_warning = false
 
-function m.drawShapes(pass, world, options)
-  local tmat = mat4()
-  for i, collider in ipairs(world:getColliders()) do
+function m.drawCollider(pass, collider, options)
+  if collider:getUserData() ~= 'ignore' then
     for _, shape in ipairs(collider:getShapes()) do
       if not options.shape_colors[shape] then
         options.shape_colors[shape] = options.shapes_palette[m.next_color_index]
         m.next_color_index = 1 + (m.next_color_index % #options.shapes_palette)
       end
       pass:setColor(options.shape_colors[shape])
-      local pose = tmat:set(collider:getPose()):translate(shape:getPosition()):rotate(shape:getOrientation())
+      local pose = mat4(collider:getPose()):translate(shape:getPosition()):rotate(shape:getOrientation())
       local shape_type = shape:getType()
       if shape_type == 'box' then
         pass:box(pose:scale(shape:getDimensions()))
@@ -90,6 +89,13 @@ function m.drawShapes(pass, world, options)
         m.shown_warning = true
       end
     end
+  end
+end
+
+
+function m.drawShapes(pass, world, options)
+  for _, collider in ipairs(world:getColliders()) do
+    m.drawCollider(pass, collider, options)
   end
 end
 
