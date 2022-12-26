@@ -80,7 +80,7 @@ function m.drawCollider(pass, collider, options)
         pass:sphere(pose:scale(shape:getRadius()), options.geometry_segments, options.geometry_segments)
       elseif shape_type == 'cylinder' then
         local l, r = shape:getLength(), shape:getRadius()
-        pass:cylinder(pose:scale(r, r, l), options.geometry_segments)
+        pass:cylinder(pose:scale(r, r, l), true, 0, 2 * math.pi, options.geometry_segments)
       elseif shape_type == 'capsule' then
         local l, r = shape:getLength(), shape:getRadius()
         pass:capsule(pose:scale(r, r, l), options.geometry_segments)
