@@ -212,6 +212,8 @@ end
 
 
 function m.drawCollisions(pass, world, options)
+  local tmat = mat4()
+  local tvec = vec3()
   world:update(0,
     function(world)
       world:computeOverlaps()
@@ -224,10 +226,11 @@ function m.drawCollisions(pass, world, options)
             -- position of collision
             pass:sphere(x,y,z, options.collision_size, options.geometry_segments)
             -- normal
-            pass:line(vec3(x,y,z),
-                      vec3(nx, ny, nz):mul(options.collision_normal_length):add(x, y, z))
+
+            pass:line(x,y,z,
+                      tvec:set(nx, ny, nz):mul(options.collision_normal_length):add(x, y, z):unpack())
             -- calculated surface point of collision
-            local pose = mat4():target(vec3(nx, ny, nz):mul(d):add(x, y, z), vec3(x, y, z))
+            local pose = tmat:target(tvec:set(nx, ny, nz):mul(d):add(x, y, z), vec3(x, y, z))
             pose:scale(options.collision_size * 0.5, options.collision_size * 0.5, -options.collision_size)
             pass:cone(pose, options.geometry_segments)
           end
