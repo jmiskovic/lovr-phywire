@@ -9,7 +9,7 @@ m.options = {
   show_angulars = true,         -- gizmo displaying the collider's angular velocity
   show_joints = true,           -- show joints between colliders
   show_contacts = true,         -- show collision contacts (quite inefficient, triples the needed collision computations)
-  geometry_segments = 9,        -- complexity of rendered geometry (number of segments in spheres, circles, cylinders, cones)
+  geometry_segments = 15,       -- complexity of rendered geometry (number of segments in spheres, circles, cylinders, cones)
   -- sizes of visualized elements
   velocity_sensitivity = 0.1,   -- velocity multiplier to scale the displayed velocity vectors
   velocity_arrow_size = 0.002,
@@ -58,7 +58,7 @@ m.render_shapes = { -- options preset for drawing filled shapes only
   show_angulars = false,
   show_joints = false,
   show_contacts = false,
-  geometry_segments = 24,
+  geometry_segments = 64,
 }
 
 m.next_color_index = 1 -- index of last chosen palette color
