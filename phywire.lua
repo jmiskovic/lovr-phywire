@@ -268,4 +268,172 @@ function m.draw(pass, world, options)
 end
 
 
+function m.toSnapshot(world)
+  local snapshot = {}
+  snapshot.colliders = {}
+  snapshot.joints = {}
+  snapshot.world = {}
+  snapshot.world.sleepingallowed = world:isSleepingAllowed()
+  snapshot.world.angulardamping = world:getAngularDamping()
+  snapshot.world.lineardamping = world:getLinearDamping()
+  snapshot.world.responsetime = world:getResponseTime()
+  snapshot.world.tightness = world:getTightness()
+  snapshot.world.stepcount = world:getStepCount()
+  snapshot.world.gravity = {world:getGravity()}
+  local joints_set = {}
+  local collider_to_index = {}
+  for i, collider in ipairs(world:getColliders()) do
+    local c = {}
+    c.pose = {collider:getPose()}
+    c.angularvelocity = {collider:getAngularVelocity()}
+    c.linearvelocity = {collider:getLinearVelocity()}
+    c.angulardamping = collider:getAngularDamping()
+    c.lineardamping = collider:getLinearDamping()
+    c.restitution = collider:getRestitution()
+    c.friction = collider:getFriction()
+    c.mass = collider:getMass()
+    -- c.massdata = {collider:getMassData()} -- unsupported
+    -- c.tag = collider:getTag() -- unsupported; cannot query World for possible tags
+    c.sleepingallowed = collider:isSleepingAllowed()
+    c.gravityignored = collider:isGravityIgnored()
+    c.kinematic = collider:isKinematic()
+    c.userdata = collider:getUserData()
+    c.awake = collider:isAwake()
+    c.shapes = {}
+    for _, shape in ipairs(collider:getShapes()) do
+      local s = {}
+      s.orientation = {shape:getOrientation()}
+      s.position = {shape:getPosition()}
+      s.userdata = shape:getUserData()
+      s.enabled = shape:isEnabled()
+      s.sensor = shape:isSensor()
+      s.type = shape:getType()
+      if s.type == 'box' then
+        s.dimensions = {shape:getDimensions()}
+        table.insert(c.shapes, s)
+      elseif s.type == 'sphere' then
+        s.radius = shape:getRadius()
+        table.insert(c.shapes, s)
+      elseif s.type == 'capsule' or s.type == 'cylinder' then
+        s.radius = shape:getRadius()
+        s.length = shape:getLength()
+        table.insert(c.shapes, s)
+      elseif not m.shown_warning then -- not supported
+        print('Warning: TerrainShape and MeshShape are not supported in snapshot')
+        m.shown_warning = true
+      end
+    end
+    table.insert(snapshot.colliders, c)
+    for _, joint in ipairs(collider:getJoints()) do
+      joints_set[joint] = true
+    end
+    collider_to_index[collider] = i
+  end
+  for joint, _ in pairs(joints_set) do
+    local j = {}
+    local colliderA, colliderB = joint:getColliders()
+    j.indexa = collider_to_index[colliderA]
+    j.indexb = collider_to_index[colliderB]
+    j.userdata = joint:getUserData()
+    j.enabled = joint:isEnabled()
+    j.type = joint:getType()
+    if j.type == 'ball' then
+      j.responsetime = joint:getResponseTime()
+      j.tightness = joint:getTightness()
+      j.anchors = {joint:getAnchors()}
+    elseif j.type == 'distance' then
+      j.anchors = {joint:getAnchors()}
+      j.distance = joint:getDistance()
+      j.responsetime = joint:getResponseTime()
+      j.tightness = joint:getTightness()
+    elseif j.type == 'hinge' then
+      j.anchors = {joint:getAnchors()}
+      j.axis = {joint:getAxis()}
+      j.limits = {joint:getLimits()}
+    elseif j.type == 'slider' then
+      j.axis = {joint:getAxis()}
+      j.limits = {joint:getLimits()}
+    end
+    table.insert(snapshot.joints, j)
+  end
+  return snapshot
+end
+
+
+function m.fromSnapshot(snapshot, world)
+  world = world or lovr.physics.newWorld()
+  world:setSleepingAllowed(snapshot.world.sleepingallowed)
+  world:setAngularDamping(snapshot.world.angulardamping)
+  world:setLinearDamping(snapshot.world.lineardamping)
+  world:setResponseTime(snapshot.world.responsetime)
+  world:setTightness(snapshot.world.tightness)
+  world:setStepCount(snapshot.world.stepcount)
+  world:setGravity(unpack(snapshot.world.gravity))
+  local index_to_collider = {}
+  for _, c in ipairs(snapshot.colliders) do
+    collider = world:newCollider()
+    collider:setPose(unpack(c.pose))
+    collider:setAngularVelocity(unpack(c.angularvelocity))
+    collider:setLinearVelocity(unpack(c.linearvelocity))
+    collider:setAngularDamping(c.angulardamping)
+    collider:setLinearDamping(c.lineardamping)
+    collider:setRestitution(c.restitution)
+    collider:setFriction(c.friction)
+    collider:setMass(c.mass)
+    collider:setSleepingAllowed(c.sleepingallowed)
+    collider:setGravityIgnored(c.gravityignored)
+    collider:setKinematic(c.kinematic)
+    collider:setUserData(c.userdata)
+    collider:setAwake(c.awake)
+    for _, s in ipairs(c.shapes) do
+      local shape
+      if s.type == 'box' then
+        shape = lovr.physics.newBoxShape(unpack(s.dimensions))
+      elseif s.type == 'sphere' then
+        shape = lovr.physics.newSphereShape(s.radius)
+      elseif s.type == 'capsule' then
+        shape = lovr.physics.newCapsuleShape(s.radius, s.length)
+      elseif s.type == 'cylinder' then
+        shape = lovr.physics.newCapsuleShape(s.radius, s.length)
+      end
+      collider:addShape(shape)
+      shape:setPosition(unpack(s.position))
+      shape:setOrientation(unpack(s.orientation))
+      shape:setUserData(s.userdata)
+      shape:setEnabled(s.enabled)
+      shape:setSensor(s.sensor)
+    end
+    table.insert(index_to_collider, collider)
+  end
+  for _, j in pairs(snapshot.joints) do
+    local joint
+    local colliderA = index_to_collider[j.indexa]
+    local colliderB = index_to_collider[j.indexb]
+    if j.type == 'ball' then
+      joint = lovr.physics.newBallJoint(colliderA, colliderB)
+      joint:setAnchor(unpack(j.anchors))
+      joint:setResponseTime(j.responsetime)
+      joint:setTightness(j.tightness)
+    elseif j.type == 'distance' then
+      joint = lovr.physics.newDistanceJoint(colliderA, colliderB)
+      joint:setAnchor(unpack(j.anchors))
+      joint:setDistance(j.distance)
+      joint:setResponseTime(j.responsetime)
+      joint:setTightness(j.tightness)
+    elseif j.type == 'hinge' then
+      joint = lovr.physics.newHingeJoint(colliderA, colliderB)
+      joint:setAnchor(unpack(j.anchors))
+      joint:setAxis(unpack(j.axis))
+      joint:setLimits(unpack(j.limits))
+    elseif j.type == 'slider' then
+      joint = lovr.physics.newSliderJoint(colliderA, colliderB)
+      joint:setAxis(unpack(j.axis))
+      joint:setLimits(unpack(j.limits))
+    end
+    joint:setUserData(j.userdata)
+    joint:setEnabled(j.enabled)
+  end
+  return world
+end
+
 return m

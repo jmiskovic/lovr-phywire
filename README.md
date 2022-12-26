@@ -22,8 +22,11 @@ Aside from simple rendering of colliders, the library can visualize the physical
 * show angular velocity gizmos around each collider
 * visualize the joints between colliders
 * show information on collision contacts
+* save and restore a snapshot of physics state
 
 ![slideshow](slideshow.gif)
+
+*Limitations:* mesh shape and terrain shape types cannot be rendered by this library. The framework doesn't have the API to fetch geometry of these shapes. When encountered they will be skipped, but will print a warning in the console output.
 
 ## Customization
 
@@ -57,6 +60,36 @@ Various other options can be overriden, things like the scaling of each visualiz
 
 The `phywire.render_shapes` table holds a preset for drawing the solid geometry of shapes without any other debugging visualizations; it can be given in place of *options* table.
 
-## Limitations
+## Snapshots
 
-Mesh shape and terrain shape types cannot be rendered by this library. The framework doesn't have the API to fetch geometry of these shapes. When encountered they will be skipped, but will print a warning in the console output.
+The current world state can be stored in a snapshot, and the snapshot can be used to re-create the state.
+
+```
+snapshot = phywire.toSnapshot(world)
+-- construct a new world from a saved snapshot
+world = phywire.fromSnapshot(snapshot)
+-- or add the snapshot into the already existing world
+phywire.fromSnapshot(state, world)
+```
+
+The snapshot is a nested Lua table containing the complete data necessary to reconstruct the physics state:
+* all the world parameters like gravity and velocity damping
+* all colliders with current poses, velocities, parameters
+* all the shapes in colliders, including their dimensions and parameters
+* all the joints connecting the colliders
+
+Because the snapshot is just a table of Lua primitives, it can easily be serialized and saved to disk.
+
+```
+-- save/load using the `serpent` lib (not included)
+lovr.filesystem.write('snapshot01.lua', serpent.block(snapshot))
+snapshot_str = lovr.filesystem.read('snapshot01.lua')
+ok, snapshot = serpent.load(snapshot_str)
+if ok then
+  world = phywire.fromSnapshot(snapshot)
+end
+```
+
+Naturally, any references to colliders/shapes/joints in the physics world will need to be re-assigned after the snapshot is loaded.
+
+**Limitations:** collider tags, mesh shapes and terrain shapes are not supported. Tags will be ignored; unsupported shapes will be skipped after printing a warning in the console output.
