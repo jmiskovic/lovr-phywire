@@ -2,7 +2,7 @@
 
 Library for visualizing and debugging [LÖVR](https://lovr.org/) physics.
 
-In LÖVR framework the rendering is completely decoupled from phyisics simulation. User should query the physics sim for position and orientation of each collider (and each shape inside each collider) and render everything themselves. This library makes it easy to render any project that uses physics, and also helps with finding issues in rigging of colliders and joints.
+In LÖVR framework the rendering is completely decoupled from physics simulation. User should query the physics sim for position and orientation of each collider (and each shape inside each collider) and render everything themselves. This library makes it easy to render any project that uses physics, and also helps with finding issues in rigging of colliders and joints.
 
 ```Lua
 phywire = require 'phywire'
@@ -26,7 +26,23 @@ Aside from simple rendering of colliders, the library can visualize the physical
 
 ![slideshow](slideshow.gif)
 
-*Limitations:* mesh shape and terrain shape types cannot be rendered by this library. The framework doesn't have the API to fetch geometry of these shapes. When encountered they will be skipped, but will print a warning in the console output.
+## Terrain and mesh
+
+The geometry of terrain and mesh shape types cannot be fetched back once the shape has been created. To render these geometries in phywire you will need to attach the rendering objects to the shape's userdata. Two rendering methods are supported: the Model object, or an object with a `draw(pass, transform)` method.
+
+```Lua
+model = lovr.graphics.newModel(filename)
+vertex_list, triangle_list = model:getTriangles()
+mesh = world:newMeshCollider(vertex_list, triangle_list)
+mesh:setUserData(model)
+
+terrain = world:newTerrainCollider(...)
+terrain:setUserData( {draw = terrain_draw_fn} )
+```
+
+If using [lovr-procmesh](https://github.com/jmiskovic/lovr-procmesh), the 'solid' representation has a suitable `draw()` method so it can be directly used as userdata.
+
+If phywire encounters any mesh or terrain data that does not have the render objects attached, those shapes will be skipped with a warning message produced in the console output.
 
 ## Customization
 
@@ -36,7 +52,7 @@ Any visualization can be disabled by overriding some options:
 
 ```Lua
 phywire.draw(pass, world, {
-  show_shapes = true,           -- draw collider shapes (mesh and terrain not supported!)
+  show_shapes = true,           -- draw collider shapes
   show_velocities = true,       -- vector showing direction and magnitude of collider linear velocity
   show_angulars = true,         -- gizmo displaying the collider's angular velocity
   show_joints = true,           -- show joints between colliders
@@ -48,23 +64,26 @@ The `wireframe` flag is used to render shapes in wireframe mode. The `overdraw` 
 
 * `{wireframe=false, overdraw=false}` draws solid geometry, provides quick and simple replacement for rendering of "physical" scene
 * `{wireframe=true, overdraw=true}` renders on top of already drawn scene, this allows users to make sure their rendering is aligned with the physics state
-* `{wireframe=true, overdraw=false}` renders wireframe visualizations but respects existing scene geometry (visuals introduce less noise, useable for VR)
+* `{wireframe=true, overdraw=false}` renders wireframe visualizations but respects existing scene geometry (visuals introduce less noise, more usable for VR)
 
-The library will assign a permanent color to each encountered shape from preselected palette. This is just convenience function for quickly throwing something onto the screen. Users can opt for their own color schemes in two ways.
 
-The default palette can be replaced by providing own `shapes_palette` table in `options` with custom set of colors. There is almost no control over what color is chosen for each shape (they will be chosen sequentially).
-
-User can also specify individual colors while creating each shape inside each collider, and provide a map of shape colors into `shape_colors` table in `options`. Keys of this table are individual shapes, values are the colors used for that shape (either in `{r,g,b}` or hexcode format).
-
-Various other options can be overriden, things like the scaling of each visualization type, sensitivities, and gizmo colors. Check the `m.options` table for more info.
+Various other options can be overridden, things like the size of each visualization type, sensitivities, and gizmo colors. Check the `m.options` table for more info.
 
 The `phywire.render_shapes` table holds a preset for drawing the solid geometry of shapes without any other debugging visualizations; it can be given in place of *options* table.
+
+## Controlling colors
+
+The phywire visualization assigns different colors for each shape. To start off with, these colors are assigned from an internal palette by default, which is a quickest way for user to visualize their colliders. Going on from here there are few more options for having more control over color choices.
+
+Second easiest option is to replace the internal palette and bring in a new set of colors. The shape colors will be chosen sequentially from the palette, which makes it hard to pick a color for each individual shape. To supply the custom palette, compose the nested list of colors pass it inside the `options.shapes_palette`. The list should have at least one color for a boring monochromatic look.
+
+User can also specify individual colors for each shape. Phywire will try to look up `options.shape_colors[shape]` and if found that color will be used. Keys of this table are individual shapes, values are the colors used for that shape in `{r,g,b}` or hexcode format. The color can also be specified inside the shape's attached userdata using `shape:setUserData({color = {r,g,b})`. The userdata color is convenient because it can preserve colors across snapshots (see below).
 
 ## Snapshots
 
 The current world state can be stored in a snapshot, and the snapshot can be used to re-create the state.
 
-```
+```Lua
 snapshot = phywire.toSnapshot(world)
 -- construct a new world from a saved snapshot
 world = phywire.fromSnapshot(snapshot)
@@ -80,7 +99,7 @@ The snapshot is a nested Lua table containing the complete data necessary to rec
 
 Because the snapshot is just a table of Lua primitives, it can easily be serialized and saved to disk.
 
-```
+```Lua
 -- save/load using the `serpent` lib (not included)
 lovr.filesystem.write('snapshot01.lua', serpent.block(snapshot))
 snapshot_str = lovr.filesystem.read('snapshot01.lua')
@@ -92,4 +111,4 @@ end
 
 Naturally, any references to colliders/shapes/joints in the physics world will need to be re-assigned after the snapshot is loaded.
 
-**Limitations:** collider tags, mesh shapes and terrain shapes are not supported. Tags will be ignored; unsupported shapes will be skipped after printing a warning in the console output.
+**Limitations:** collider tags, mesh shapes and terrain shapes are not supported for snapshots. Tags will be ignored; unsupported shapes will be skipped after printing a warning in the console output.

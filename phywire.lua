@@ -65,25 +65,37 @@ m.next_color_index = 1 -- index of last chosen palette color
 m.shown_warning = false
 
 function m.drawCollider(pass, collider, options)
-  if collider:getUserData() ~= 'ignore' then
-    for _, shape in ipairs(collider:getShapes()) do
-      if not options.shape_colors[shape] then
+  for _, shape in ipairs(collider:getShapes()) do
+    if not options.shape_colors[shape] then
+      local userdata = shape:getUserData()
+      if type(userdata) == 'table' and userdata.color then
+        options.shape_colors[shape] = userdata.color
+      elseif tostring(userdata) == 'Model' then
+        options.shape_colors[shape] = {1,1,1}
+      else
         options.shape_colors[shape] = options.shapes_palette[m.next_color_index]
         m.next_color_index = 1 + (m.next_color_index % #options.shapes_palette)
       end
-      pass:setColor(options.shape_colors[shape])
-      local pose = mat4(collider:getPose()):translate(shape:getPosition()):rotate(shape:getOrientation())
-      local shape_type = shape:getType()
-      if shape_type == 'box' then
-        pass:box(pose:scale(shape:getDimensions()))
-      elseif shape_type == 'sphere' then
-        pass:sphere(pose:scale(shape:getRadius()), options.geometry_segments, options.geometry_segments)
-      elseif shape_type == 'cylinder' then
-        local l, r = shape:getLength(), shape:getRadius()
-        pass:cylinder(pose:scale(r, r, l), true, 0, 2 * math.pi, options.geometry_segments)
-      elseif shape_type == 'capsule' then
-        local l, r = shape:getLength(), shape:getRadius()
-        pass:capsule(pose:scale(r, r, l), options.geometry_segments)
+    end
+    pass:setColor(options.shape_colors[shape])
+    local pose = mat4(collider:getPose()):translate(shape:getPosition()):rotate(shape:getOrientation())
+    local shape_type = shape:getType()
+    if shape_type == 'box' then
+      pass:box(pose:scale(shape:getDimensions()))
+    elseif shape_type == 'sphere' then
+      pass:sphere(pose:scale(shape:getRadius()), options.geometry_segments, options.geometry_segments)
+    elseif shape_type == 'cylinder' then
+      local l, r = shape:getLength(), shape:getRadius()
+      pass:cylinder(pose:scale(r, r, l), true, 0, 2 * math.pi, options.geometry_segments)
+    elseif shape_type == 'capsule' then
+      local l, r = shape:getLength(), shape:getRadius()
+      pass:capsule(pose:scale(r, r, l), options.geometry_segments)
+    else
+      local userdata = collider:getUserData()
+      if userdata and userdata.draw then
+        userdata:draw(pass, pose)
+      elseif tostring(userdata) == 'Model' then
+        pass:draw(userdata, pose)
       elseif not m.shown_warning then -- not supported
         print('Warning: TerrainShape and MeshShape are not supported and will not be rendered')
         m.shown_warning = true
@@ -232,7 +244,6 @@ function m.drawCollisions(pass, world, options)
             -- position of collision
             pass:sphere(x,y,z, options.collision_size, options.geometry_segments)
             -- normal
-
             pass:line(x,y,z,
                       tvec:set(nx, ny, nz):mul(options.collision_normal_length):add(x, y, z):unpack())
             -- calculated surface point of collision
