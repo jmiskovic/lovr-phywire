@@ -405,7 +405,7 @@ function m.fromSnapshot(snapshot, world)
       elseif s.type == 'capsule' then
         shape = lovr.physics.newCapsuleShape(s.radius, s.length)
       elseif s.type == 'cylinder' then
-        shape = lovr.physics.newCapsuleShape(s.radius, s.length)
+        shape = lovr.physics.newCylinderShape(s.radius, s.length)
       end
       collider:addShape(shape)
       shape:setPosition(unpack(s.position))
@@ -427,7 +427,7 @@ function m.fromSnapshot(snapshot, world)
       joint:setTightness(j.tightness)
     elseif j.type == 'distance' then
       joint = lovr.physics.newDistanceJoint(colliderA, colliderB)
-      joint:setAnchor(unpack(j.anchors))
+      joint:setAnchors(unpack(j.anchors))
       joint:setDistance(j.distance)
       joint:setResponseTime(j.responsetime)
       joint:setTightness(j.tightness)
