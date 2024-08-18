@@ -72,3 +72,11 @@ The phywire visualization assigns a color for each shape. By default these color
 Second easiest option is to replace the internal palette and bring in a new set of colors. The shape colors will be chosen sequentially from the palette, which makes it hard to control the color for each individual shape. To use the custom color palette, compose the nested list of colors and assign the `options.shapes_palette` to that table. The list can contain just one color, which results in monochromatic rendering of all the shapes.
 
 User can also specify individual colors for each shape. Phywire will try to look up `options.shape_colors[shape]`. If found, that color will be used. Keys of the `shape_colors` table are individual shapes, values are the colors used for that shape in `{r,g,b}` or hexcode format. For example, `phywire.options.shape_colors[my_shape] = 0xff00ff` will specify manual color for a single element.
+
+## Troubleshooting
+
+While `phywire.draw` provides a comprehensive visualization of your physics simulation, sometimes it's helpful to peek behind the curtain and see things as the physics engine sees them. That's where the `xray()` function comes in handy.
+
+This method casts rays from the screen into the physics scene, and checks for collisions with colliders in the world. By drawing tiny cubes at each hit point, `xray()` offers a direct and raw representation of your collider geometry. Use this function when you suspect inconsistencies between your visual representation and the actual physics simulation.
+
+To use, replace your `phywire.draw` call with `phywire.xray(pass, world, resolution)`. Resolution is optional (defaults to 0.01), it can be used to control the trade-off between the speed and precision.

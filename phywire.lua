@@ -325,4 +325,24 @@ function m.draw(pass, world)
 end
 
 
+function m.xray(pass, world, resolution)
+  resolution = resolution or 0.01
+  local NEAR_PLANE = 0.01
+  local w, h = pass:getDimensions()
+  local clip_from_screen = mat4(-1, -1, 0):scale(2 / w, 2 / h, 1)
+  local view_pose = mat4(pass:getViewPose(1))
+  local view_proj = pass:getProjection(1, mat4())
+  local world_from_screen = view_pose:mul(view_proj:invert()):mul(clip_from_screen)
+  for sx = 0, w, w * resolution do
+    for sy = 0, h, h * resolution do
+      local origin = world_from_screen * vec3(sx, sy, NEAR_PLANE / NEAR_PLANE)
+      local target = world_from_screen * vec3(sx, sy, NEAR_PLANE / 100)
+      local collider, shape, x, y, z, nx, ny, nz, f = world:raycast(origin, target)
+      if collider then
+        pass:cube(x, y, z, resolution)
+      end
+    end
+  end
+end
+
 return m
