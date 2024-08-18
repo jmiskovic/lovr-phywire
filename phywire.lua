@@ -96,7 +96,6 @@ function m.drawCollider(pass, collider, clip_from_world)
       elseif shape_type == 'capsule' then
         local l, r = shape:getLength(), shape:getRadius()
         pose
-          :rotate(math.pi / 2, -1, 0, 0) -- jolt has them oriented differently
           :scale(r, r, l)
         pass:capsule(pose, options.geometry_segments)
       else
