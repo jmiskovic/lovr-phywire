@@ -304,7 +304,6 @@ end
 function m.draw(pass, world)
   local options = m.options
   pass:push('state')
-  pass:setShader()
   if options.wireframe then
     pass:setWireframe(true)
     if options.overdraw then
