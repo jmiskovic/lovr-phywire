@@ -32,6 +32,7 @@ m.options = {
   angular_x_color = {0.631, 0.231, 0.227},
   angular_y_color = {0.247, 0.427, 0.224},
   angular_z_color = {0.141, 0.239, 0.361},
+  ignored_colliders = {},  -- for colliders not to be drawn: phywire.options.ignored_colliders[c] = true
   shape_colors = {}, -- table that maps a shape to color, if unspecified random color is selected
   shapes_palette = { -- list of colors to be assigned to each shape not specified in shape_colors
     {0.180, 0.133, 0.184}, -- https://lospec.com/palette-list/mushroom
@@ -65,47 +66,45 @@ function m.setColor(shape_or_collider, color)
     m.options.shape_colors[shape] = color
   elseif shape_or_collider.getShapes then
     local collider = shape_or_collider
-    for i, shape in ipairs(collider:getShapes()) do
+    for _, shape in ipairs(collider:getShapes()) do
       m.options.shape_colors[shape] = color
     end
   end
 end
 
 
-function m.drawCollider(pass, collider, clip_from_world)
+function m.drawCollider(pass, collider)
+  if m.options.ignored_colliders[collider] then return end
   local options = m.options
   for _, shape in ipairs(collider:getShapes()) do
-    local skip = false
-    if not skip then
-      if not options.shape_colors[shape] then
-        options.shape_colors[shape] = options.shapes_palette[m.next_color_index]
-        m.next_color_index = 1 + (m.next_color_index % #options.shapes_palette)
-      end
-      pass:setColor(options.shape_colors[shape])
-      local pose = mat4(collider:getPose()):mul(mat4(shape:getOffset()))
-      local shape_type = shape:getType()
-      if shape_type == 'box' then
-        pass:box(pose:scale(shape:getDimensions()))
-      elseif shape_type == 'sphere' then
-        pass:sphere(pose:scale(shape:getRadius()), options.geometry_segments, options.geometry_segments)
-      elseif shape_type == 'cylinder' then
-        local l, r = shape:getLength(), shape:getRadius()
-        pose
-          :scale(r, r, l)
-        pass:cylinder(pose, true, 0, 2 * math.pi, options.geometry_segments)
-      elseif shape_type == 'capsule' then
-        local l, r = shape:getLength(), shape:getRadius()
-        pose
-          :scale(r, r, l)
-        pass:capsule(pose, options.geometry_segments)
-      else
-        if not m.shown_warning then -- not supported
-          print('Warning: TerrainShape and MeshShape are not supported and will not be rendered')
-          m.shown_warning = true
-        end
-      end
-      m.drawn_shapes = m.drawn_shapes + 1
+    if not options.shape_colors[shape] then
+      options.shape_colors[shape] = options.shapes_palette[m.next_color_index]
+      m.next_color_index = 1 + (m.next_color_index % #options.shapes_palette)
     end
+    pass:setColor(options.shape_colors[shape])
+    local pose = mat4(collider:getPose()):mul(mat4(shape:getOffset()))
+    local shape_type = shape:getType()
+    if shape_type == 'box' then
+      pass:box(pose:scale(shape:getDimensions()))
+    elseif shape_type == 'sphere' then
+      pass:sphere(pose:scale(shape:getRadius()), options.geometry_segments, options.geometry_segments)
+    elseif shape_type == 'cylinder' then
+      local l, r = shape:getLength(), shape:getRadius()
+      pose
+        :scale(r, r, l)
+      pass:cylinder(pose, true, 0, 2 * math.pi, options.geometry_segments)
+    elseif shape_type == 'capsule' then
+      local l, r = shape:getLength(), shape:getRadius()
+      pose
+        :scale(r, r, l)
+      pass:capsule(pose, options.geometry_segments)
+    else
+      if not m.shown_warning then -- not supported
+        print('Warning: TerrainShape and MeshShape are not supported and will not be rendered')
+        m.shown_warning = true
+      end
+    end
+    m.drawn_shapes = m.drawn_shapes + 1
   end
 end
 
@@ -113,7 +112,7 @@ end
 function m.drawShapes(pass, world)
   m.drawn_shapes = 0
   for _, collider in ipairs(world:getColliders()) do
-    m.drawCollider(pass, collider, clip_from_world)
+    m.drawCollider(pass, collider)
   end
 end
 
@@ -140,8 +139,8 @@ end
 function m.drawJoints(pass, world)
   local options = m.options
   pass:setColor(1,1,1)
-  for i, collider in ipairs(world:getColliders()) do
-    for j, joint in ipairs(collider:getJoints()) do
+  for _, collider in ipairs(world:getColliders()) do
+    for _, joint in ipairs(collider:getJoints()) do
       local colliderA, colliderB = joint:getColliders()
       if collider == colliderA then
         local joint_type = joint:getType()
@@ -157,7 +156,6 @@ function m.drawJoints(pass, world)
           local pose = mat4():target(vec3(x1, y1, z1):lerp(x2, y2, z2, 0.5), vec3(x2, y2, z2)):rotate(-math.pi/2, 0,1,0)
           pass:text(joint_type, pose:scale(options.joint_label_size))
         elseif joint_type == 'slider' then
-          local fraction = joint:getPosition()
           local ax, ay, az = joint:getAxis()
           local x1, y1, z1 = colliderA:getPosition()
           local x2, y2, z2 = colliderB:getPosition()
@@ -215,7 +213,7 @@ end
 
 function m.drawVelocities(pass, world)
   local options = m.options
-  for i, collider in ipairs(world:getColliders()) do
+  for _, collider in ipairs(world:getColliders()) do
     local pos = vec3(collider:getPosition())
     local vel = vec3(collider:getLinearVelocity())
     local mag = vel:length()
@@ -233,7 +231,7 @@ end
 function m.drawAngulars(pass, world)
   local options = m.options
   local pose = mat4()
-  for i, collider in ipairs(world:getColliders()) do
+  for _, collider in ipairs(world:getColliders()) do
     local ang = vec3(collider:getAngularVelocity()):mul(options.angular_sensitivity)
      -- X axis
     pass:setColor(options.angular_x_color)
@@ -273,31 +271,7 @@ end
 
 
 function m.drawCollisions(pass, world)
-  local options = m.options
-  local tmat = mat4()
-  local tvec = vec3()
-  world:update(0,
-    function(world)
-      world:computeOverlaps()
-      for shapeA, shapeB in world:overlaps() do
-        if world:collide(shapeA, shapeB) then
-          local contacts = world:getContacts(shapeA, shapeB)
-          for i,c in ipairs(contacts) do
-            local x, y, z, nx, ny, nz, d = unpack(c)
-            pass:setColor(options.collision_color)
-            -- position of collision
-            pass:sphere(x,y,z, options.collision_size, options.geometry_segments)
-            -- normal
-            pass:line(x,y,z,
-                      tvec:set(nx, ny, nz):mul(options.collision_normal_length):add(x, y, z):unpack())
-            -- calculated surface point of collision
-            local pose = tmat:target(tvec:set(nx, ny, nz):mul(d):add(x, y, z), vec3(x, y, z))
-            pose:scale(options.collision_size * 0.5, options.collision_size * 0.5, -options.collision_size)
-            pass:cone(pose, options.geometry_segments)
-          end
-        end
-      end
-    end)
+  -- TODO
 end
 
 
