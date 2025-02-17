@@ -80,3 +80,7 @@ While `phywire.draw` provides a comprehensive visualization of your physics simu
 This method casts rays from the screen into the physics scene, and checks for collisions with colliders in the world. By drawing tiny cubes at each hit point, `xray()` offers a direct and raw representation of your collider geometry. Use this function when you suspect inconsistencies between your visual representation and the actual physics simulation.
 
 To use, replace your `phywire.draw` call with `phywire.xray(pass, world, resolution)`. Resolution is optional (defaults to 0.01), it can be used to control the trade-off between the speed and precision.
+
+## Older LÖVR version
+
+Older LÖVR versions (v.17 and back) use a different physics engine and the physics API is a bit different. The variant that supports it is on the `ode` branch.
