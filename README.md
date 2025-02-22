@@ -73,13 +73,24 @@ Second easiest option is to replace the internal palette and bring in a new set 
 
 User can also specify individual colors for each shape. Phywire will try to look up `options.shape_colors[shape]`. If found, that color will be used. Keys of the `shape_colors` table are individual shapes, values are the colors used for that shape in `{r,g,b}` or hexcode format. For example, `phywire.options.shape_colors[my_shape] = 0xff00ff` will specify manual color for a single element.
 
-## Troubleshooting
+## Troubleshooting with x-ray
 
 While `phywire.draw` provides a comprehensive visualization of your physics simulation, sometimes it's helpful to peek behind the curtain and see things as the physics engine sees them. That's where the `xray()` function comes in handy.
 
-This method casts rays from the screen into the physics scene, and checks for collisions with colliders in the world. By drawing tiny cubes at each hit point, `xray()` offers a direct and raw representation of your collider geometry. Use this function when you suspect inconsistencies between your visual representation and the actual physics simulation.
+This method casts many rays from the screen into the physics scene, and checks for collisions with colliders in the world. By drawing tiny cubes at each hit point, `xray()` offers a direct and raw representation of your collider geometry. Use this function when you suspect inconsistencies between the visual representation and the actual physics simulation.
 
-To use, replace your `phywire.draw` call with `phywire.xray(pass, world, resolution)`. Resolution is optional (defaults to 0.01), it can be used to control the trade-off between the speed and precision.
+![slideshow](xray.png)
+
+To put it into action, replace your `phywire.draw` call with `phywire.xray(pass, world, resolution)`. Resolution is optional (defaults to 0.01) and can be used to control the trade-off between the speed and precision of visuals.
+
+
+## Scene interaction
+
+The phygrab module implements a generic mouse interaction with colliders. We can grab the collider with right mouse button and then drag it around and release it. The mouse wheel can push the grabbed collider closer or farther to the camera.
+
+The module offers a quick way to integrate it into any project. Simply place `require('phygrab').integrate(world)` at the end of the `main.lua` file or in your `lovr.load()` function. A more clean and maintainable way of usage is to call *phygrab*'s' `draw`, `mousepressed`, `mousereleased` and `wheelmoved` functions from LÖVR's callbacks.
+
+ The module uses right mouse button by default as the left mouse button is often mapped to the camera rotation. Use `phygrab.MOUSE_BUTT`
 
 ## Older LÖVR version
 

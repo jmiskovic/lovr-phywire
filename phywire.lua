@@ -1,3 +1,4 @@
+-- library for visualizing lovr physics
 local m = {}
 
 -- default options table
