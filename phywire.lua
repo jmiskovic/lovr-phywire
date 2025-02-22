@@ -53,6 +53,7 @@ m.options = {
   }
 }
 
+m.meshFromConvex = {} -- maps convex shapes to their extracted meshes
 m.next_color_index = 1 -- index of last chosen palette color
 m.shown_warning = false
 
@@ -73,6 +74,67 @@ function m.setColor(shape_or_collider, color)
   end
 end
 
+function m.fromConvexShape(shape)
+  local function updateNormals(vertices, indices)
+    if not indices then
+      indices = {}
+      for i = 1, #vertices do
+        indices[i] = i
+      end
+    end
+    if #indices < 3 then return end
+    local normals = {} -- maps vertex index to list of normals of adjacent faces
+    local v1, v2, v3 = vec3(), vec3(), vec3()
+    for i = 1, #indices, 3 do
+      local vi1, vi2, vi3 = indices[i], indices[i + 1], indices[i + 2]
+      v1:set(unpack(vertices[vi1]))
+      v2:set(unpack(vertices[vi2]))
+      v3:set(unpack(vertices[vi3]))
+      local fnormal = {v2:sub(v1):cross(v3:sub(v1)):normalize():unpack()}
+      normals[vi1] = normals[vi1] or {}
+      normals[vi2] = normals[vi2] or {}
+      normals[vi3] = normals[vi3] or {}
+      table.insert(normals[vi1], fnormal)
+      table.insert(normals[vi2], fnormal)
+      table.insert(normals[vi3], fnormal)
+    end
+    local vnormal, tvec3 = vec3(), vec3()
+    for i = 1, #vertices do
+      if normals[i] then
+        vnormal:set(0,0,0)
+        local c = 0
+        for _, fnormal in ipairs(normals[i]) do
+          vnormal:add(tvec3:set(unpack(fnormal)))
+          c = c + 1
+        end
+        vnormal:mul(1 / c)
+        local v = vertices[i]
+        v[4], v[5], v[6] = vnormal:normalize():unpack()
+      end
+    end
+  end
+  local vertices, indices = {}, {}
+  for i = 1, shape:getPointCount() do
+    local x, y, z = shape:getPoint(i)
+    table.insert(vertices, {x, y, z})
+  end
+  for i = 1, shape:getFaceCount() do
+    local face_indices = shape:getFace(i)
+    for j = 2, #face_indices - 1 do
+      table.insert(indices, face_indices[1])
+      table.insert(indices, face_indices[j])
+      table.insert(indices, face_indices[j + 1])
+    end
+  end
+  updateNormals(vertices, indices)
+  local mesh = lovr.graphics.newMesh({
+    { 'VertexPosition', 'vec3' },
+    { 'VertexNormal',   'vec3' },
+  }, vertices, 'gpu')
+  mesh:setIndices(indices)
+  mesh:computeBoundingBox()
+  return mesh
+end
 
 function m.drawCollider(pass, collider)
   if m.options.ignored_colliders[collider] then return end
@@ -99,6 +161,11 @@ function m.drawCollider(pass, collider)
       pose
         :scale(r, r, l)
       pass:capsule(pose, options.geometry_segments)
+    elseif shape_type == 'convex' then
+      if not m.meshFromConvex[shape] then
+        m.meshFromConvex[shape] = m.fromConvexShape(shape)
+      end
+      pass:draw(m.meshFromConvex[shape], pose)
     else
       if not m.shown_warning then -- not supported
         print('Warning: TerrainShape and MeshShape are not supported and will not be rendered')
