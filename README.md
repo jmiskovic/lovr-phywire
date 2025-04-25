@@ -49,11 +49,13 @@ The third argument in `phywire.draw(pass, world, options)` receives a table with
 Any visualization can be disabled by overriding some options:
 
 ```Lua
-phywire.options.show_shapes = true           -- draw collider shapes (on by default)
-phywire.options.show_velocities = true       -- vector showing direction and magnitude of collider linear velocity
-phywire.options.show_angulars = true         -- gizmo displaying the collider's angular velocity
-phywire.options.show_joints = true           -- show joints between colliders
-phywire.options.show_contacts = true         -- show collision contacts (quite inefficient, triples the needed collision computations)
+phywire.options.show_shapes = true       -- draw collider shapes (on by default)
+phywire.options.show_velocities = true   -- vector showing direction and magnitude of collider linear velocity
+phywire.options.show_angulars = true     -- gizmo displaying the collider's angular velocity
+phywire.options.show_joints = true       -- show joints between colliders
+phywire.options.show_contacts = true     -- show collision contacts (quite inefficient, triples the needed collision computations)
+phywire.options.show_outlines = true     -- draw a thin outline around shapes, inked as darker tint of shape's color
+phywire.options.show_aabb = true         -- show the axis-aligned boundary box of each collider shape
 ```
 
 The `wireframe` flag is used to render shapes in wireframe mode. The `overdraw` flag disables the depth buffer test. This allows for some useful combinations.
@@ -62,8 +64,7 @@ The `wireframe` flag is used to render shapes in wireframe mode. The `overdraw` 
 * `wireframe=true, overdraw=true` renders on top of already drawn scene, this allows users to make sure their rendering is aligned with the physics state
 * `wireframe=true, overdraw=false` renders wireframe visualizations but respects existing scene geometry (visuals introduce less noise, more usable for VR)
 
-
-Various other options can be overridden, things like the size of each visualization type, sensitivities, and gizmo colors. Check the `m.options` table for more info.
+Various other options can be overridden, things like the size of each visualization type, sensitivities, colliders to ignore while drawing, parameters controlling the outline rendering, etc. Check the `m.options` table for more info.
 
 ## Controlling colors
 
@@ -71,7 +72,7 @@ The phywire visualization assigns a color for each shape. By default these color
 
 Second easiest option is to replace the internal palette and bring in a new set of colors. The shape colors will be chosen sequentially from the palette, which makes it hard to control the color for each individual shape. To use the custom color palette, compose the nested list of colors and assign the `options.shapes_palette` to that table. The list can contain just one color, which results in monochromatic rendering of all the shapes.
 
-User can also specify individual colors for each shape. Phywire will try to look up `options.shape_colors[shape]`. If found, that color will be used. Keys of the `shape_colors` table are individual shapes, values are the colors used for that shape in `{r,g,b}` or hexcode format. For example, `phywire.options.shape_colors[my_shape] = 0xff00ff` will specify manual color for a single element.
+User can also specify individual colors for each shape. Phywire will try to look up `options.shape_colors[shape]`. If found, that color will be used. Keys of the `shape_colors` table are individual shapes, values are the colors used for that shape in `{r,g,b}` or hexcode format. For example, `phywire.options.shape_colors[my_shape] = 0xff00ff` will specify manual color for a single element. A convenience function `phywire.setColor()` takes the shape or the collider as a 1st parameter and the color as 2nd parameter.
 
 ## Troubleshooting with x-ray
 
@@ -90,7 +91,7 @@ The phygrab module implements a generic mouse interaction with colliders. We can
 
 The module offers a quick way to integrate it into any project. Simply place `require('phygrab').integrate(world)` at the end of the `main.lua` file or in your `lovr.load()` function. A more clean and maintainable way of usage is to call *phygrab*'s' `draw`, `mousepressed`, `mousereleased` and `wheelmoved` functions from LÖVR's callbacks.
 
- The module uses right mouse button by default as the left mouse button is often mapped to the camera rotation. Use `phygrab.MOUSE_BUTT`
+The module uses right mouse button by default as the left mouse button is often mapped to the camera rotation. If left mouse is preferred, use `phygrab.mouse_button = 1`.
 
 ## Older LÖVR version
 
