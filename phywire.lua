@@ -7,6 +7,7 @@ m.options = {
   wireframe = false,             -- show shapes in wireframe instead of filled geometry
   overdraw = false,              -- force elements to render over existing scene (ignore depth buffer check)
   show_shapes = true,            -- draw collider shapes (mesh and terrain not supported!)
+  show_outlines = false,         -- draw a thin outline around shapes, inked as darker tint of shape's color
   show_aabb = false,             -- draw each shape's AABB box
   show_velocities = false,       -- vector showing direction and magnitude of collider linear velocity
   show_angulars = false,         -- gizmo displaying the collider's angular velocity
@@ -14,6 +15,10 @@ m.options = {
   show_contacts = false,         -- show collision contacts (quite inefficient, triples the needed collision computations)  ```lua
   geometry_segments = 28,        -- complexity of rendered geometry (number of segments in spheres, circles, cylinders, cones)
   -- outline appearance
+  outline_width = 0.015,
+  outline_tint = 0.8,
+  outline_depth_offset = -1e6,
+  outline_depth_slope = -1,
   -- sizes of visualized elements
   velocity_sensitivity = 0.1,    -- velocity multiplier to scale the displayed velocity vectors
   velocity_arrow_size = 0.002,
@@ -185,6 +190,60 @@ function m.drawCollider(pass, collider)
 end
 
 
+function m.drawOutlines(pass, world)
+  local options = m.options
+  pass:setCullMode('back')
+  pass:setDepthOffset(options.outline_depth_offset, options.outline_depth_slope)
+
+  local segments = options.geometry_segments
+  local w = options.outline_width
+  local t = options.outline_tint
+
+  for _, collider in ipairs(world:getColliders()) do
+    local collider_pose = mat4(collider:getPose())
+    for _, shape in ipairs(collider:getShapes()) do
+      local pose = collider_pose * mat4(shape:getOffset())
+      local shape_type = shape:getType()
+      local shape_color = options.shape_colors[shape] or {1, 1, 1}
+      local outline_color = { shape_color[1] * t, shape_color[2] * t, shape_color[3] * t }
+      pass:setColor(outline_color)
+      if shape_type == 'box' then
+        --pose:scale(shape:getDimensions())
+        local sx, sy, sz = shape:getDimensions()
+        pose:scale(sx + w * 2, sy + w * 2, sz + w * 2)
+        pose:scale(-1)
+        pass:box(pose)
+      elseif shape_type == 'sphere' then
+        pose:scale(shape:getRadius())
+        pose:scale(-(1 + w * 2))
+        pass:sphere(pose, segments, segments)
+      elseif shape_type == 'cylinder' then
+        local l, r = shape:getLength(), shape:getRadius()
+        pose
+          :scale(r + w, r + w, l + 2 * w)
+        pose:scale(-1)
+        pass:cylinder(pose, true, 0, 2 * math.pi, segments)
+      elseif shape_type == 'capsule' then
+        local l, r = shape:getLength(), shape:getRadius()
+        pose
+          :scale(r + w, r, l - w / 2)
+        pose:scale(-1)
+        pass:capsule(pose, segments)
+      elseif shape_type == 'convex' then
+        local mesh = m.meshFromConvex[shape]
+        if mesh then
+          pose:mul(mat4(shape:getCenterOfMass()))
+          pose:scale(1 + w)
+          pass:setDepthOffset(1)
+          pass:draw(mesh, pose)
+          pass:setDepthOffset()
+        end
+      end
+    end
+  end
+end
+
+
 function m.drawShapes(pass, world)
   m.drawn_shapes = 0
   for _, collider in ipairs(world:getColliders()) do
@@ -292,7 +351,6 @@ function m.drawJoints(pass, world)
           pose:translate(0, 0, options.joint_line_size)
           local r = math.atan(joint:getLimit()) * options.joint_line_size
           pass:cone(mat4(pose):scale(r, r, options.joint_line_size), options.geometry_segments)
-          --local pose = mat4():target(vec3(x1, y1, z1):lerp(x2, y2, z2, 0.5), vec3(x2, y2, z2)):rotate(-math.pi/2, 0,1,0)
         end
       end
     end
