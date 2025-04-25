@@ -11,8 +11,9 @@ m.options = {
   show_velocities = false,       -- vector showing direction and magnitude of collider linear velocity
   show_angulars = false,         -- gizmo displaying the collider's angular velocity
   show_joints = false,           -- show joints between colliders
-  show_contacts = false,         -- show collision contacts (quite inefficient, triples the needed collision computations)
-  geometry_segments = 22,        -- complexity of rendered geometry (number of segments in spheres, circles, cylinders, cones)
+  show_contacts = false,         -- show collision contacts (quite inefficient, triples the needed collision computations)  ```lua
+  geometry_segments = 28,        -- complexity of rendered geometry (number of segments in spheres, circles, cylinders, cones)
+  -- outline appearance
   -- sizes of visualized elements
   velocity_sensitivity = 0.1,    -- velocity multiplier to scale the displayed velocity vectors
   velocity_arrow_size = 0.002,
@@ -62,6 +63,7 @@ for i=1,8 do
   aabb_points[i] = lovr.math.newVec3()
 end
 
+
 function m.setColor(shape_or_collider, color)
   if shape_or_collider.getType then
     local shape = shape_or_collider
@@ -73,6 +75,7 @@ function m.setColor(shape_or_collider, color)
     end
   end
 end
+
 
 function m.fromConvexShape(shape)
   local function updateNormals(vertices, indices)
@@ -136,31 +139,36 @@ function m.fromConvexShape(shape)
   return mesh
 end
 
+
 function m.drawCollider(pass, collider)
   if m.options.ignored_colliders[collider] then return end
   local options = m.options
+  local segments = options.geometry_segments
+
+  local collider_pose = mat4(collider:getPose())
   for _, shape in ipairs(collider:getShapes()) do
     if not options.shape_colors[shape] then
       options.shape_colors[shape] = options.shapes_palette[m.next_color_index]
       m.next_color_index = 1 + (m.next_color_index % #options.shapes_palette)
     end
     pass:setColor(options.shape_colors[shape])
-    local pose = mat4(collider:getPose()):mul(mat4(shape:getOffset()))
+    local pose = collider_pose * mat4(shape:getOffset())
     local shape_type = shape:getType()
     if shape_type == 'box' then
       pass:box(pose:scale(shape:getDimensions()))
     elseif shape_type == 'sphere' then
-      pass:sphere(pose:scale(shape:getRadius()), options.geometry_segments, options.geometry_segments)
+      pose:scale(shape:getRadius())
+      pass:sphere(pose, segments, segments)
     elseif shape_type == 'cylinder' then
       local l, r = shape:getLength(), shape:getRadius()
       pose
         :scale(r, r, l)
-      pass:cylinder(pose, true, 0, 2 * math.pi, options.geometry_segments)
+      pass:cylinder(pose, true, 0, 2 * math.pi, segments)
     elseif shape_type == 'capsule' then
       local l, r = shape:getLength(), shape:getRadius()
       pose
         :scale(r, r, l)
-      pass:capsule(pose, options.geometry_segments)
+      pass:capsule(pose, segments)
     elseif shape_type == 'convex' then
       if not m.meshFromConvex[shape] then
         m.meshFromConvex[shape] = m.fromConvexShape(shape)
@@ -217,12 +225,9 @@ function m.drawJoints(pass, world)
           pass:setColor(options.joint_anchor_color)
           pass:sphere(vec3(x1, y1, z1), options.joint_anchor_size, options.geometry_segments)
           pass:sphere(vec3(x2, y2, z2), options.joint_anchor_size, options.geometry_segments)
-          pass:setColor(options.joint_axis_color)
-          --pass:line(vec3(x1, y1, z1):lerp(x2, y2, z2, 0.05),
-          --          vec3(x1, y1, z1):lerp(x2, y2, z2, 0.95))
           pass:setColor(options.joint_label_color)
-          local pose = mat4():target(vec3(x1, y1, z1):lerp(x2, y2, z2, 0.5), vec3(x2, y2, z2)):rotate(-math.pi/2, 0,1,0)
-          pass:text(joint_type, pose:scale(options.joint_label_size))
+          local pose = mat4(x1, y1, z1):scale(options.joint_label_size)
+          pass:text(joint_type, pose)
         elseif joint_type == 'slider' then
           local ax, ay, az = joint:getAxis()
           local x1, y1, z1 = colliderA:getPosition()
@@ -246,7 +251,6 @@ function m.drawJoints(pass, world)
           pose:target(vec3(x1, y1, z1):lerp(x2, y2, z2, 0.5), vec3(x2, y2, z2))
           pose:rotate(-math.pi/2, 0,1,0)
           pass:text(joint_type, pose:scale(options.joint_label_size))
-
         elseif joint_type == 'hinge' then
           local x1, y1, z1,  x2, y2, z2 = joint:getAnchors()
           local ax, ay, az = joint:getAxis()
@@ -272,6 +276,23 @@ function m.drawJoints(pass, world)
           pass:setColor(options.joint_label_color)
           local pose = mat4(vec3(x1, y1, z1):lerp(x2, y2, z2, 0.5), colliderA:getOrientation())
           pass:text(joint_type, pose:scale(options.joint_label_size))
+        elseif joint_type == 'cone' then
+          local ax, ay, az = joint:getAxis()
+          local x1, y1, z1 = colliderA:getPosition()
+          local x2, y2, z2 = colliderB:getPosition()
+          pass:setColor(options.joint_axis_color)
+          pass:line(vec3(x1, y1, z1), -- line from anchor down the axis
+                    vec3(ax, ay, az):mul(options.joint_line_size):add(x1, y1, z1))
+          pass:setColor(options.joint_label_color)
+          local pose = mat4():target(vec3(x1, y1, z1), vec3(x1 + ax, y1 + ay, z1 + az))
+          if vec3(x2, y2, z2):sub(x1, y1, z1):dot(ax, ay, az) > 0 then
+            pose:rotate(math.pi, 0,1,0)
+          end
+          pass:text(joint_type, mat4(pose):scale(options.joint_label_size))
+          pose:translate(0, 0, options.joint_line_size)
+          local r = math.atan(joint:getLimit()) * options.joint_line_size
+          pass:cone(mat4(pose):scale(r, r, options.joint_line_size), options.geometry_segments)
+          --local pose = mat4():target(vec3(x1, y1, z1):lerp(x2, y2, z2, 0.5), vec3(x2, y2, z2)):rotate(-math.pi/2, 0,1,0)
         end
       end
     end
@@ -352,16 +373,17 @@ function m.draw(pass, world)
       pass:setDepthTest()
     end
   end
-  if options.show_shapes then     m.drawShapes(pass, world, options)     end
-  if options.show_aabb then       m.drawAABBs(pass, world, options)      end
+  if options.show_shapes then     m.drawShapes(pass, world)     end
+  if options.show_aabb then       m.drawAABBs(pass, world)      end
   if options.overdraw then
     pass:setDepthTest()
   end
   pass:setShader() -- drawing text and other gizmos with default shader
-  if options.show_joints then     m.drawJoints(pass, world, options)     end
-  if options.show_velocities then m.drawVelocities(pass, world, options) end
-  if options.show_angulars then   m.drawAngulars(pass, world, options)   end
-  if options.show_contacts then   m.drawCollisions(pass, world, options) end
+  if options.show_joints then     m.drawJoints(pass, world)     end
+  if options.show_velocities then m.drawVelocities(pass, world) end
+  if options.show_angulars then   m.drawAngulars(pass, world)   end
+  if options.show_contacts then   m.drawCollisions(pass, world) end
+  if options.show_outlines then   m.drawOutlines(pass, world)   end
   pass:pop('state')
 end
 
