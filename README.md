@@ -2,7 +2,7 @@
 
 Library for visualizing and debugging [LÖVR](https://lovr.org/) physics.
 
-In LÖVR framework the rendering is completely decoupled from physics simulation. User should query the physics sim for position and orientation of each collider (and each shape inside each collider) and render everything themselves. This library makes it easy to render any project that uses physics, and also helps with finding issues in rigging of colliders and joints.
+In LÖVR framework the rendering is completely decoupled from physics simulation. Devs should query the physics sim for position and orientation of each collider (and each shape inside each collider) and render everything themselves. This library makes it easy to render any project that uses physics, and also helps with finding issues in rigging of colliders and joints.
 
 ```Lua
 phywire = require 'phywire'
@@ -24,72 +24,86 @@ Aside from simple rendering of colliders, the library can visualize the physical
 
 ![slideshow](slideshow.gif)
 
-## Terrain and mesh
+### Managing the drawing of shapes
 
-The geometry of terrain and mesh shape types cannot be fetched back once the shape has been created. To render these geometries in phywire you will need to attach the rendering objects to the shape's userdata. Two rendering methods are supported: the Model object, or an object with a `draw(pass, transform)` method.
-
-```Lua
-model = lovr.graphics.newModel(filename)
-vertex_list, triangle_list = model:getTriangles()
-mesh = world:newMeshCollider(vertex_list, triangle_list)
-mesh:setUserData(model)
-
-terrain = world:newTerrainCollider(...)
-terrain:setUserData( {draw = terrain_draw_fn} )
-```
-
-If using [lovr-procmesh](https://github.com/jmiskovic/lovr-procmesh), the 'solid' representation has a suitable `draw()` method so it can be directly used as userdata.
-
-If phywire encounters any mesh or terrain data that does not have the render objects attached, those shapes will be skipped with a warning message produced in the console output.
-
-## Customization
-
-The third argument in `phywire.draw(pass, world, options)` receives a table with rendering *options*. When options are omitted, all the visualizations are utilized and the wireframe overdraw mode is selected.
-
-Any visualization can be disabled by overriding some options:
+It is possible to customize the drawing of each collider instance and also of each shape instance. When specified, the user draw function will be called, instead of drawing the built-in basic shapes.
 
 ```Lua
-phywire.options.show_shapes = true       -- draw collider shapes (on by default)
-phywire.options.show_velocities = true   -- vector showing direction and magnitude of collider linear velocity
-phywire.options.show_angulars = true     -- gizmo displaying the collider's angular velocity
-phywire.options.show_joints = true       -- show joints between colliders
-phywire.options.show_contacts = true     -- show collision contacts (quite inefficient, triples the needed collision computations)
-phywire.options.show_outlines = true     -- draw a thin outline around shapes, inked as darker tint of shape's color
-phywire.options.show_aabb = true         -- show the axis-aligned boundary box of each collider shape
+phywire.setDraw(shape_or_collider,
+  function(pass, pose)
+  end)
 ```
 
-The `wireframe` flag is used to render shapes in wireframe mode. The `overdraw` flag disables the depth buffer test. This allows for some useful combinations.
+After it is set, phywire will call given draw function instead of drawing shapes for this instance.
 
-* `wireframe=false, overdraw=false` draws solid geometry, provides quick and simple replacement for rendering of "physical" scene
-* `wireframe=true, overdraw=true` renders on top of already drawn scene, this allows users to make sure their rendering is aligned with the physics state
-* `wireframe=true, overdraw=false` renders wireframe visualizations but respects existing scene geometry (visuals introduce less noise, more usable for VR)
+Some instances can also be marked to be skipped. This is useful for sensors or parts of the scene that are rendered by another system.
 
-Various other options can be overridden, things like the size of each visualization type, sensitivities, colliders to ignore while drawing, parameters controlling the outline rendering, etc. Check the `m.options` table for more info.
+```Lua
+phywire.setIgnored(shape_or_collider)      -- phywire will not draw this instance
+```
 
-## Controlling colors
+### Unsupported shapes
 
-The phywire visualization assigns a color for each shape. By default these colors are chosen from an internal palette, which is a quickest way to visualize colliders in lovr project. Going on from here there are few more options for having more control over color choices.
+Current phywire limitation is that drawing of terrain and mesh shapes is not supported. There is no way to fetch back the necessary data from physics engine after the shape has been created. To render the static meshes or terrain, you could supply a custom draw function:
 
-Second easiest option is to replace the internal palette and bring in a new set of colors. The shape colors will be chosen sequentially from the palette, which makes it hard to control the color for each individual shape. To use the custom color palette, compose the nested list of colors and assign the `options.shapes_palette` to that table. The list can contain just one color, which results in monochromatic rendering of all the shapes.
+```Lua
+mesh = lovr.graphics.newMesh(--[[ ... ]])
+collider = world:newMeshCollider(mesh)
+phywire.setDraw(collider,
+  function(pass, pose)
+    pass:draw(mesh)
+  end)
+```
 
-User can also specify individual colors for each shape. Phywire will try to look up `options.shape_colors[shape]`. If found, that color will be used. Keys of the `shape_colors` table are individual shapes, values are the colors used for that shape in `{r,g,b}` or hexcode format. For example, `phywire.options.shape_colors[my_shape] = 0xff00ff` will specify manual color for a single element. A convenience function `phywire.setColor()` takes the shape or the collider as a 1st parameter and the color as 2nd parameter.
+If phywire encounters any mesh or terrain data that does not have the specified rendering functions, those shapes will be skipped with a warning message produced in the console output.
 
-## Troubleshooting with x-ray
+### Rendering options
 
-While `phywire.draw` provides a comprehensive visualization of your physics simulation, sometimes it's helpful to peek behind the curtain and see things as the physics engine sees them. That's where the `xray()` function comes in handy.
+The pyhwire rendering can be precisely controlled to turn features on and off, or to adjust the parameters. Here are the available rendering options and their defaults.
 
-This method casts many rays from the screen into the physics scene, and checks for collisions with colliders in the world. By drawing tiny cubes at each hit point, `xray()` offers a direct and raw representation of your collider geometry. Use this function when you suspect inconsistencies between the visual representation and the actual physics simulation.
+```Lua
+phywire.options.wireframe = false        -- show shapes in wireframe instead of filled geometry
+phywire.options.overdraw = false         -- force elements to render over existing scene (ignore depth buffer check)
+phywire.options.show_shapes = true       -- draw collider shapes (mesh and terrain not supported!)
+phywire.options.show_outlines = false    -- draw a thin outline around shapes, inked as darker tint of shape's color
+phywire.options.show_aabb = false        -- draw each shape's axis-aligned boundary box
+phywire.options.show_velocities = false  -- vector showing direction and magnitude of collider linear velocity
+phywire.options.show_angulars = false    -- gizmo displaying the collider's angular velocity
+phywire.options.show_joints = false      -- show joints between colliders
+```
+
+The `wireframe` flag is used to render shapes in wireframe mode. The `overdraw` flag disables the depth buffer test. This allows for few interesting combinations.
+
+* `wireframe=false, overdraw=false` draws solid geometry, provides quick and simple way to render solid objects
+* `wireframe=true, overdraw=true` renders the wireframe on top of already drawn scene, to visually inspect that the visuals are aligned with the physics scene
+* `wireframe=true, overdraw=false` renders wireframe visualizations but respects existing scene geometry (visuals are less noisy, more usable for VR)
+
+Various other options can be overridden, parameters like the visual sizes and colors of each visualization type, velocity indicator sensitivity, parameters controlling the outline rendering, etc. Check the `m.options` table at start of `phywire.lua` to learn about them.
+
+### Controlling colors
+
+The phywire visualization assigns a color for each shape. By default these colors are chosen from an internal palette, which is a quickest way to visualize colliders in a fresh lovr project. Going on from here there are few more options for having more control over color choices.
+
+Second easiest option is to replace the internal palette and bring in a new set of colors. To use the custom color palette, compose the nested list of colors and assign it to the `options.shapes_palette`. The list can contain just one color, which results in monochromatic rendering of all the shapes. The shape colors will be chosen sequentially from the palette, which makes it hard to control the color for each individual shape.
+
+Ultimately you can also specify specific colors for each collider or each individual shape with `phywire.setColor(shape_or_collider, color)`. The `color` can be `{r,g,b}` table or hexcode format.
+
+### Troubleshooting with x-ray
+
+While `phywire.draw` tries to provide a comprehensive and correct visualization of your physics simulation, sometimes it's helpful to peek behind the curtain and see things as the physics engine sees them. That's where the `xray()` function comes in handy.
+
+This drawing function casts many rays from the screen into the physics scene, and checks for collisions with colliders in the world. By drawing many tiny cube "pixels" at each hit point, it shows a direct and raw representation of your collider exact geometry in the physics world scene. Use it as a low-level inspection tool when you suspect inconsistencies between the rendered representation and the actual physics simulation.
 
 ![slideshow](xray.png)
 
-To put it into action, replace your `phywire.draw` call with `phywire.xray(pass, world, resolution)`. Resolution is optional (defaults to 0.01) and can be used to control the trade-off between the speed and precision of visuals.
+To put it into action, replace your `phywire.draw` call with `phywire.xray(pass, world, resolution)`. Resolution is optional (default is 0.01, 100x100 raster grid) and can be used to control the trade-off between the speed and the visual fidelity.
 
 
 ## Scene interaction
 
-The phygrab module implements a generic mouse interaction with colliders. We can grab the collider with right mouse button and then drag it around and release it. The mouse wheel can push the grabbed collider closer or farther to the camera.
+The phygrab is a separate module that implements a generic mouse cursor interaction with all non-kinematic colliders. You can grab the collider with right mouse button and then drag it around and release it. The mouse wheel can push the grabbed collider closer or farther to the camera.
 
-The module offers a quick way to integrate it into any project. Simply place `require('phygrab').integrate(world)` at the end of the `main.lua` file or in your `lovr.load()` function. A more clean and maintainable way of usage is to call *phygrab*'s' `draw`, `mousepressed`, `mousereleased` and `wheelmoved` functions from LÖVR's callbacks.
+The module offers a quick way to integrate it into any project. Simply place `require('phygrab').integrate(world)` at the end of the `main.lua` file or in your `lovr.load()` function. A more clean and maintainable way of usage is to call *phygrab*'s' `draw`, `mousepressed`, `mousereleased` and `wheelmoved` functions from the implemented LÖVR's callbacks.
 
 The module uses right mouse button by default as the left mouse button is often mapped to the camera rotation. If left mouse is preferred, use `phygrab.mouse_button = 1`.
 

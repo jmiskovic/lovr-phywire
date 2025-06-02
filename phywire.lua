@@ -8,17 +8,17 @@ m.options = {
   overdraw = false,              -- force elements to render over existing scene (ignore depth buffer check)
   show_shapes = true,            -- draw collider shapes (mesh and terrain not supported!)
   show_outlines = false,         -- draw a thin outline around shapes, inked as darker tint of shape's color
-  show_aabb = false,             -- draw each shape's AABB box
+  show_aabb = false,             -- draw each shape's axis-aligned boundary box
   show_velocities = false,       -- vector showing direction and magnitude of collider linear velocity
   show_angulars = false,         -- gizmo displaying the collider's angular velocity
   show_joints = false,           -- show joints between colliders
-  show_contacts = false,         -- show collision contacts (quite inefficient, triples the needed collision computations)  ```lua
+  show_contacts = false,         -- show collision contacts (quite inefficient, triples the needed collision computations)
   geometry_segments = 28,        -- complexity of rendered geometry (number of segments in spheres, circles, cylinders, cones)
   -- outline appearance
-  outline_width = 0.015,
-  outline_tint = 0.8,
-  outline_depth_offset = -1e6,
-  outline_depth_slope = -1,
+  outlines_width = 0.015,
+  outlines_tint = 0.8,            -- controls how much the shape color is darkened in the shape outline
+  outlines_depth_offset = -1e6,   -- depth buffer offset correction to push outlines inwards our outwards from camera
+  outlines_depth_slope = -1,
   -- sizes of visualized elements
   velocity_sensitivity = 0.1,    -- velocity multiplier to scale the displayed velocity vectors
   velocity_arrow_size = 0.002,
@@ -39,8 +39,6 @@ m.options = {
   angular_x_color = {0.631, 0.231, 0.227},
   angular_y_color = {0.247, 0.427, 0.224},
   angular_z_color = {0.141, 0.239, 0.361},
-  ignored_colliders = {},  -- for colliders not to be drawn: phywire.options.ignored_colliders[c] = true
-  shape_colors = {}, -- table that maps a shape to color, if unspecified random color is selected
   shapes_palette = { -- list of colors to be assigned to each shape not specified in shape_colors
     {0.180, 0.133, 0.184}, -- https://lospec.com/palette-list/mushroom
     {0.600, 0.239, 0.255},
@@ -59,9 +57,12 @@ m.options = {
   }
 }
 
+m.shape_colors = {} -- maps a shape to a specific color
 m.meshFromConvex = {} -- maps convex shapes to their extracted meshes
 m.next_color_index = 1 -- index of last chosen palette color
 m.shown_warning = false
+m.specified_draw_fns = setmetatable({}, { __mode = "k" }) -- maps shapes or colliders to custom draw functions
+
 
 local aabb_points = {}
 for i=1,8 do
@@ -69,16 +70,59 @@ for i=1,8 do
 end
 
 
+local function readColor(...)
+  local color = {1, 1, 1, 1}
+  local args = {...}
+  local numArgs = select('#', ...)
+  if type(args[1]) == 'table' then -- color in the table: {r, g, b, a}
+    local t = args[1]
+    color[1] = t[1] or 1
+    color[2] = t[2] or 1
+    color[3] = t[3] or 1
+    color[4] = t[4] or 1
+  elseif numArgs >= 3 then -- direct r, g, b components as arguments
+    color[1] = args[1]
+    color[2] = args[2]
+    color[3] = args[3]
+    color[4] = args[4] or 1
+  else                    -- hex color
+    local hex = args[1]
+    local r = bit.band(bit.rshift(hex, 16), 0xFF)
+    local g = bit.band(bit.rshift(hex, 8), 0xFF)
+    local b = bit.band(hex, 0xFF)
+    color[1] = r / 255
+    color[2] = g / 255
+    color[3] = b / 255
+    color[4] = args[2] or 1
+  end
+  return color[1], color[2], color[3], color[4]
+end
+
+
 function m.setColor(shape_or_collider, color)
   if shape_or_collider.getType then
     local shape = shape_or_collider
-    m.options.shape_colors[shape] = color
+    m.shape_colors[shape] = color
   elseif shape_or_collider.getShapes then
     local collider = shape_or_collider
     for _, shape in ipairs(collider:getShapes()) do
-      m.options.shape_colors[shape] = color
+      m.shape_colors[shape] = color
     end
+  else
+    error('setColor must receive Shape or Collider instance as 1st argument')
   end
+end
+
+
+function m.setDraw(shape_or_collider, draw_fn)
+  assert(shape_or_collider.getType or shape_or_collider.getShapes,
+    'setColor must receive Shape or Collider instance as 1st argument')
+  m.specified_draw_fns[shape_or_collider] = draw_fn
+end
+
+
+function m.setIgnored(shape_or_collider)
+  m.specified_draw_fns[shape_or_collider] = 'skip'
 end
 
 
@@ -146,43 +190,58 @@ end
 
 
 function m.drawCollider(pass, collider)
-  if m.options.ignored_colliders[collider] then return end
+  local collider_pose = mat4(collider:getPose())
+  local collider_draw_fn = m.specified_draw_fns[collider]
+  if collider_draw_fn then
+    if collider_draw_fn ~= 'skip' then
+      pass:setColor(1,1,1)
+      collider_draw_fn(pass, collider_pose)
+    end
+    return -- skip the individual shapes of this collider
+  end
   local options = m.options
   local segments = options.geometry_segments
 
-  local collider_pose = mat4(collider:getPose())
   for _, shape in ipairs(collider:getShapes()) do
-    if not options.shape_colors[shape] then
-      options.shape_colors[shape] = options.shapes_palette[m.next_color_index]
-      m.next_color_index = 1 + (m.next_color_index % #options.shapes_palette)
-    end
-    pass:setColor(options.shape_colors[shape])
     local pose = collider_pose * mat4(shape:getOffset())
-    local shape_type = shape:getType()
-    if shape_type == 'box' then
-      pass:box(pose:scale(shape:getDimensions()))
-    elseif shape_type == 'sphere' then
-      pose:scale(shape:getRadius())
-      pass:sphere(pose, segments, segments)
-    elseif shape_type == 'cylinder' then
-      local l, r = shape:getLength(), shape:getRadius()
-      pose
-        :scale(r, r, l)
-      pass:cylinder(pose, true, 0, 2 * math.pi, segments)
-    elseif shape_type == 'capsule' then
-      local l, r = shape:getLength(), shape:getRadius()
-      pose
-        :scale(r, r, l)
-      pass:capsule(pose, segments)
-    elseif shape_type == 'convex' then
-      if not m.meshFromConvex[shape] then
-        m.meshFromConvex[shape] = m.fromConvexShape(shape)
+    local shape_draw_fn = m.specified_draw_fns[shape]
+    if shape_draw_fn then
+      if shape_draw_fn ~= 'skip' then
+        pass:setColor(1,1,1)
+        shape_draw_fn(pass, pose)
       end
-      pass:draw(m.meshFromConvex[shape], pose)
     else
-      if not m.shown_warning then -- not supported
-        print('Warning: TerrainShape and MeshShape are not supported and will not be rendered')
-        m.shown_warning = true
+      if not m.shape_colors[shape] then
+        m.shape_colors[shape] = options.shapes_palette[m.next_color_index]
+        m.next_color_index = 1 + (m.next_color_index % #options.shapes_palette)
+      end
+      pass:setColor(m.shape_colors[shape])
+      local shape_type = shape:getType()
+      if shape_type == 'box' then
+        pass:box(pose:scale(shape:getDimensions()))
+      elseif shape_type == 'sphere' then
+        pose:scale(shape:getRadius())
+        pass:sphere(pose, segments, segments)
+      elseif shape_type == 'cylinder' then
+        local l, r = shape:getLength(), shape:getRadius()
+        pose
+          :scale(r, r, l)
+        pass:cylinder(pose, true, 0, 2 * math.pi, segments)
+      elseif shape_type == 'capsule' then
+        local l, r = shape:getLength(), shape:getRadius()
+        pose
+          :scale(r, r, l)
+        pass:capsule(pose, segments)
+      elseif shape_type == 'convex' then
+        if not m.meshFromConvex[shape] then
+          m.meshFromConvex[shape] = m.fromConvexShape(shape)
+        end
+        pass:draw(m.meshFromConvex[shape], pose)
+      else
+        if not m.shown_warning then -- not supported
+          print('Warning: TerrainShape and MeshShape are not supported and will not be rendered')
+          m.shown_warning = true
+        end
       end
     end
     m.drawn_shapes = m.drawn_shapes + 1
@@ -193,54 +252,59 @@ end
 function m.drawOutlines(pass, world)
   local options = m.options
   pass:setCullMode('back')
-  pass:setDepthOffset(options.outline_depth_offset, options.outline_depth_slope)
+  pass:setDepthOffset(options.outlines_depth_offset, options.outlines_depth_slope)
 
   local segments = options.geometry_segments
-  local w = options.outline_width
-  local t = options.outline_tint
+  local w = options.outlines_width
+  local t = options.outlines_tint
 
   for _, collider in ipairs(world:getColliders()) do
-    local collider_pose = mat4(collider:getPose())
-    for _, shape in ipairs(collider:getShapes()) do
-      local pose = collider_pose * mat4(shape:getOffset())
-      local shape_type = shape:getType()
-      local shape_color = options.shape_colors[shape] or {1, 1, 1}
-      local outline_color = { shape_color[1] * t, shape_color[2] * t, shape_color[3] * t }
-      pass:setColor(outline_color)
-      if shape_type == 'box' then
-        --pose:scale(shape:getDimensions())
-        local sx, sy, sz = shape:getDimensions()
-        pose:scale(sx + w * 2, sy + w * 2, sz + w * 2)
-        pose:scale(-1)
-        pass:box(pose)
-      elseif shape_type == 'sphere' then
-        pose:scale(shape:getRadius())
-        pose:scale(-(1 + w * 2))
-        pass:sphere(pose, segments, segments)
-      elseif shape_type == 'cylinder' then
-        local l, r = shape:getLength(), shape:getRadius()
-        pose
-          :scale(r + w, r + w, l + 2 * w)
-        pose:scale(-1)
-        pass:cylinder(pose, true, 0, 2 * math.pi, segments)
-      elseif shape_type == 'capsule' then
-        local l, r = shape:getLength(), shape:getRadius()
-        pose
-          :scale(r + w, r, l - w / 2)
-        pose:scale(-1)
-        pass:capsule(pose, segments)
-      elseif shape_type == 'convex' then
-        local mesh = m.meshFromConvex[shape]
-        if mesh then
-          pose:mul(mat4(shape:getCenterOfMass()))
-          pose:scale(1 + w)
-          pass:setDepthOffset(1)
-          pass:draw(mesh, pose)
-          pass:setDepthOffset()
+    if not collider_draw_fn then
+      local collider_pose = mat4(collider:getPose())
+      for _, shape in ipairs(collider:getShapes()) do
+        local shape_draw_fn = m.specified_draw_fns[shape]
+        if not shape_draw_fn then
+          local pose = collider_pose * mat4(shape:getOffset())
+          local shape_type = shape:getType()
+          local shape_color = m.shape_colors[shape] or {1, 1, 1}
+          local r, g, b = readColor(shape_color)
+          pass:setColor(r * t, g * t, b * t)
+          if shape_type == 'box' then
+            local sx, sy, sz = shape:getDimensions()
+            pose:scale(sx + w * 2, sy + w * 2, sz + w * 2)
+            pose:scale(-1)
+            pass:box(pose)
+          elseif shape_type == 'sphere' then
+            pose:scale(shape:getRadius())
+            pose:scale(-(1 + w * 2))
+            pass:sphere(pose, segments, segments)
+          elseif shape_type == 'cylinder' then
+            local l, r = shape:getLength(), shape:getRadius()
+            pose
+              :scale(r + w, r + w, l + 2 * w)
+            pose:scale(-1)
+            pass:cylinder(pose, true, 0, 2 * math.pi, segments)
+          elseif shape_type == 'capsule' then
+            local l, r = shape:getLength(), shape:getRadius()
+            pose
+              :scale(r + w, r, l - w / 2)
+            pose:scale(-1)
+            pass:capsule(pose, segments)
+          elseif shape_type == 'convex' then
+            local mesh = m.meshFromConvex[shape]
+            if mesh then
+              pose:mul(mat4(shape:getCenterOfMass()))
+              pose:scale(1 + w)
+              pass:setDepthOffset(1)
+              pass:draw(mesh, pose)
+              pass:setDepthOffset()
+            end
+          end
         end
       end
     end
   end
+  pass:setDepthOffset()
 end
 
 
@@ -441,7 +505,7 @@ function m.draw(pass, world)
   if options.show_velocities then m.drawVelocities(pass, world) end
   if options.show_angulars then   m.drawAngulars(pass, world)   end
   if options.show_contacts then   m.drawCollisions(pass, world) end
-  if options.show_outlines then   m.drawOutlines(pass, world)   end
+  if options.show_outlines and not options.wireframe then m.drawOutlines(pass, world)   end
   pass:pop('state')
 end
 
