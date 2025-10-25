@@ -5,12 +5,14 @@ m.range = 200
 m.mouse_button = 2
 m.near_plane = 0.01
 
+m.draw_cursor = false
+
 m.joint_uses_spring = false
 m.joint_frequency = 2
 m.joint_damping = 3
 
+m.collider = nil   -- sensor collider synced to mouse movement needed for joint
 
-local mouse_collider
 local mouse_joint
 local world_from_screen = Mat4()
 local hovered = { depth = math.huge, collider = nil, position = Vec3() }
@@ -42,9 +44,9 @@ end
 
 function m.init(world)
   assert(world, 'Need to pass in the physics world object')
-  mouse_collider = world:newSphereCollider(0, 0, 0, 0.001)
-  mouse_collider:setKinematic(true)
-  mouse_collider:setSensor(true)
+  m.collider = world:newSphereCollider(0, 0, 0, 0.1)
+  m.collider:setKinematic(true)
+  m.collider:setSensor(true)
 end
 
 
@@ -56,7 +58,7 @@ function m.draw(pass)
   if not mouse_joint then
     hovered.collider = nil
     hovered.depth = math.huge
-    local world = mouse_collider:getWorld()
+    local world = m.collider:getWorld()
     world:raycast(origin, target, nil,
       function(collider, shape, x, y, z, nx, ny, nz, fraction)
         local depth = origin:distance(x, y, z)
@@ -64,24 +66,26 @@ function m.draw(pass)
           hovered.collider = collider
           hovered.depth = math.max(depth, 1e-5)
           hovered.position:set(x,y,z)
-          mouse_collider:setPosition(x, y, z)
+          m.collider:setPosition(x, y, z)
         end
         return 1
       end)
   else
     local cursor_pos = world_from_screen:mul(mx, my, m.near_plane / hovered.depth)
-    mouse_collider:moveKinematic(cursor_pos, quat(), 1/8)
+    m.collider:moveKinematic(cursor_pos, quat(), 1/8)
     local xa, ya, za, xb, yb, zb = mouse_joint:getAnchors()
-    pass:setColor(1,1,1)
-    pass:capsule(cursor_pos, vec3(xb, yb, zb), 0.01, 7)
+    if m.draw_cursor then
+      pass:setColor(1,1,1)
+      pass:capsule(cursor_pos, vec3(xb, yb, zb), 0.01, 7)
+    end
   end
 end
 
 
-function m.mousepressed(x, y, button, pass)
+function m.mousepressed(x, y, button)
   if button == m.mouse_button and hovered.collider then
-    local pos = vec3(mouse_collider:getPosition())
-    mouse_joint = lovr.physics.newDistanceJoint(hovered.collider, mouse_collider, hovered.position, hovered.position)
+    local pos = vec3(m.collider:getPosition())
+    mouse_joint = lovr.physics.newDistanceJoint(hovered.collider, m.collider, hovered.position, hovered.position)
     if m.joint_uses_spring then
       mouse_joint:setSpring(m.joint_frequency, m.joint_damping)
     end
@@ -91,9 +95,9 @@ end
 
 function m.mousereleased(x, y, button)
   if button == m.mouse_button and mouse_joint then
-    for _, joint in ipairs(mouse_collider:getJoints()) do
+    for _, joint in ipairs(m.collider:getJoints()) do
       joint:destroy()
-      mouse_collider:setLinearVelocity(0)
+      m.collider:setLinearVelocity(0)
     end
     mouse_joint = nil
   end

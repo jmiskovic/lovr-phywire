@@ -259,6 +259,7 @@ function m.drawOutlines(pass, world)
   local t = options.outlines_tint
 
   for _, collider in ipairs(world:getColliders()) do
+    local collider_draw_fn = m.specified_draw_fns[collider]
     if not collider_draw_fn then
       local collider_pose = mat4(collider:getPose())
       for _, shape in ipairs(collider:getShapes()) do
@@ -500,6 +501,7 @@ function m.draw(pass, world)
   if options.overdraw then
     pass:setDepthTest()
   end
+  pass:setWireframe(false)
   pass:setShader() -- drawing text and other gizmos with default shader
   if options.show_joints then     m.drawJoints(pass, world)     end
   if options.show_velocities then m.drawVelocities(pass, world) end
