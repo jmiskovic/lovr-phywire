@@ -15,7 +15,7 @@ m.collider = nil   -- sensor collider synced to mouse movement needed for joint
 
 local mouse_joint
 local world_from_screen = Mat4()
-local hovered = { depth = math.huge, collider = nil, position = Vec3() }
+local hovered = { depth = math.huge, collider = nil, position = vector(0, 0, 0) }
 
 local function getWorldFromScreen(pass)
   local w, h = pass:getDimensions()
@@ -23,7 +23,7 @@ local function getWorldFromScreen(pass)
   local view_pose = mat4(pass:getViewPose(1))
   local view_proj = pass:getProjection(1, mat4())
   local is_orthographic = view_proj[16] == 1
-  local t = view_pose:mul(view_proj:invert()):mul(clip_from_screen)
+  local t = view_pose * mat4(view_proj):invert() * clip_from_screen
   world_from_screen:set(t)
 end
 
@@ -32,8 +32,8 @@ local function getRay(distance, pass)
   distance = distance or m.range
   local ray = {}
   local x, y = lovr.system.getMousePosition()
-  ray.origin = vec3(world_from_screen:mul(x, y, m.near_plane / m.near_plane))
-  ray.target = vec3(world_from_screen:mul(x, y, m.near_plane / distance))
+  ray.origin = world_from_screen * vector(x, y, m.near_plane / m.near_plane)
+  ray.target = world_from_screen * vector(x, y, m.near_plane / distance)
   if is_orthographic then
     ray.origin.z = distance
     ray.target.z = -1000
@@ -53,30 +53,30 @@ end
 function m.draw(pass)
   getWorldFromScreen(pass)
   local mx, my = lovr.system.getMousePosition()
-  local origin = world_from_screen:mul(mx, my, m.near_plane / m.near_plane)
-  local target = world_from_screen:mul(mx, my, m.near_plane / m.range)
+  local origin = world_from_screen * vector(mx, my, m.near_plane / m.near_plane)
+  local target = world_from_screen * vector(mx, my, m.near_plane / m.range)
   if not mouse_joint then
     hovered.collider = nil
     hovered.depth = math.huge
     local world = m.collider:getWorld()
     world:raycast(origin, target, nil,
       function(collider, shape, x, y, z, nx, ny, nz, fraction)
-        local depth = origin:distance(x, y, z)
+        local depth = origin:distance(vector(x, y, z))
         if collider and not collider:isKinematic() and depth < hovered.depth then
           hovered.collider = collider
           hovered.depth = math.max(depth, 1e-5)
-          hovered.position:set(x,y,z)
+          hovered.position = vector(x,y,z)
           m.collider:setPosition(x, y, z)
         end
         return 1
       end)
   else
-    local cursor_pos = world_from_screen:mul(mx, my, m.near_plane / hovered.depth)
-    m.collider:moveKinematic(cursor_pos, quat(), 1/8)
+    local cursor_pos = world_from_screen * vector(mx, my, m.near_plane / hovered.depth)
+    m.collider:moveKinematic(cursor_pos, quaternion(0, 0, 1, 0), 1/8)
     local xa, ya, za, xb, yb, zb = mouse_joint:getAnchors()
     if m.draw_cursor then
       pass:setColor(1,1,1)
-      pass:capsule(cursor_pos, vec3(xb, yb, zb), 0.01, 7)
+      pass:capsule(cursor_pos, vector(xb, yb, zb), 0.01, 7)
     end
   end
 end
@@ -84,7 +84,6 @@ end
 
 function m.mousepressed(x, y, button)
   if button == m.mouse_button and hovered.collider then
-    local pos = vec3(m.collider:getPosition())
     mouse_joint = lovr.physics.newDistanceJoint(hovered.collider, m.collider, hovered.position, hovered.position)
     if m.joint_uses_spring then
       mouse_joint:setSpring(m.joint_frequency, m.joint_damping)

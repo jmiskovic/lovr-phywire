@@ -65,14 +65,14 @@ m.specified_draw_fns = setmetatable({}, { __mode = "k" }) -- maps shapes or coll
 
 
 local aabb_points = {}
-for i=1,8 do
-  aabb_points[i] = lovr.math.newVec3()
+for i = 1, 8 do
+  aabb_points[i] = vector(0, 0, 0)
 end
 
 
 local function readColor(...)
-  local color = {1, 1, 1, 1}
-  local args = {...}
+  local color = { 1, 1, 1, 1 }
+  local args = { ... }
   local numArgs = select('#', ...)
   if type(args[1]) == 'table' then -- color in the table: {r, g, b, a}
     local t = args[1]
@@ -136,13 +136,12 @@ function m.fromConvexShape(shape)
     end
     if #indices < 3 then return end
     local normals = {} -- maps vertex index to list of normals of adjacent faces
-    local v1, v2, v3 = vec3(), vec3(), vec3()
     for i = 1, #indices, 3 do
       local vi1, vi2, vi3 = indices[i], indices[i + 1], indices[i + 2]
-      v1:set(unpack(vertices[vi1]))
-      v2:set(unpack(vertices[vi2]))
-      v3:set(unpack(vertices[vi3]))
-      local fnormal = {v2:sub(v1):cross(v3:sub(v1)):normalize():unpack()}
+      local v1 = vector(table.unpack(vertices[vi1]))
+      local v2 = vector(table.unpack(vertices[vi2]))
+      local v3 = vector(table.unpack(vertices[vi3]))
+      local fnormal = (v2 - v1):cross(v3 - v1):normalize()
       normals[vi1] = normals[vi1] or {}
       normals[vi2] = normals[vi2] or {}
       normals[vi3] = normals[vi3] or {}
@@ -150,25 +149,25 @@ function m.fromConvexShape(shape)
       table.insert(normals[vi2], fnormal)
       table.insert(normals[vi3], fnormal)
     end
-    local vnormal, tvec3 = vec3(), vec3()
     for i = 1, #vertices do
       if normals[i] then
-        vnormal:set(0,0,0)
+        local vnormal = vector(0, 0, 0)
         local c = 0
         for _, fnormal in ipairs(normals[i]) do
-          vnormal:add(tvec3:set(unpack(fnormal)))
+          vnormal = vnormal + fnormal
           c = c + 1
         end
-        vnormal:mul(1 / c)
+        local vn = (vnormal * (1 / c)):normalize()
         local v = vertices[i]
-        v[4], v[5], v[6] = vnormal:normalize():unpack()
+        local nx, ny, nz = vn:unpack()
+        v[4], v[5], v[6] = nx, ny, nz
       end
     end
   end
   local vertices, indices = {}, {}
   for i = 1, shape:getPointCount() do
     local x, y, z = shape:getPoint(i)
-    table.insert(vertices, {x, y, z})
+    table.insert(vertices, { x, y, z })
   end
   for i = 1, shape:getFaceCount() do
     local face_indices = shape:getFace(i)
@@ -194,7 +193,7 @@ function m.drawCollider(pass, collider)
   local collider_draw_fn = m.specified_draw_fns[collider]
   if collider_draw_fn then
     if collider_draw_fn ~= 'skip' then
-      pass:setColor(1,1,1)
+      pass:setColor(1, 1, 1)
       collider_draw_fn(pass, collider_pose)
     end
     return -- skip the individual shapes of this collider
@@ -207,7 +206,7 @@ function m.drawCollider(pass, collider)
     local shape_draw_fn = m.specified_draw_fns[shape]
     if shape_draw_fn then
       if shape_draw_fn ~= 'skip' then
-        pass:setColor(1,1,1)
+        pass:setColor(1, 1, 1)
         shape_draw_fn(pass, pose)
       end
     else
@@ -224,13 +223,11 @@ function m.drawCollider(pass, collider)
         pass:sphere(pose, segments, segments)
       elseif shape_type == 'cylinder' then
         local l, r = shape:getLength(), shape:getRadius()
-        pose
-          :scale(r, r, l)
+        pose:scale(r, r, l)
         pass:cylinder(pose, true, 0, 2 * math.pi, segments)
       elseif shape_type == 'capsule' then
         local l, r = shape:getLength(), shape:getRadius()
-        pose
-          :scale(r, r, l)
+        pose:scale(r, r, l)
         pass:capsule(pose, segments)
       elseif shape_type == 'convex' then
         if not m.meshFromConvex[shape] then
@@ -267,7 +264,7 @@ function m.drawOutlines(pass, world)
         if not shape_draw_fn then
           local pose = collider_pose * mat4(shape:getOffset())
           local shape_type = shape:getType()
-          local shape_color = m.shape_colors[shape] or {1, 1, 1}
+          local shape_color = m.shape_colors[shape] or { 1, 1, 1 }
           local r, g, b = readColor(shape_color)
           pass:setColor(r * t, g * t, b * t)
           if shape_type == 'box' then
@@ -281,14 +278,12 @@ function m.drawOutlines(pass, world)
             pass:sphere(pose, segments, segments)
           elseif shape_type == 'cylinder' then
             local l, r = shape:getLength(), shape:getRadius()
-            pose
-              :scale(r + w, r + w, l + 2 * w)
+            pose:scale(r + w, r + w, l + 2 * w)
             pose:scale(-1)
             pass:cylinder(pose, true, 0, 2 * math.pi, segments)
           elseif shape_type == 'capsule' then
             local l, r = shape:getLength(), shape:getRadius()
-            pose
-              :scale(r + w, r, l - w / 2)
+            pose:scale(r + w, r, l - w / 2)
             pose:scale(-1)
             pass:capsule(pose, segments)
           elseif shape_type == 'convex' then
@@ -338,17 +333,17 @@ end
 
 function m.drawJoints(pass, world)
   local options = m.options
-  pass:setColor(1,1,1)
+  pass:setColor(1, 1, 1)
   for _, collider in ipairs(world:getColliders()) do
     for _, joint in ipairs(collider:getJoints()) do
       local colliderA, colliderB = joint:getColliders()
       if collider == colliderA then
         local joint_type = joint:getType()
         if joint_type == 'ball' then
-          local x1, y1, z1,  x2, y2, z2 = joint:getAnchors()
+          local x1, y1, z1, x2, y2, z2 = joint:getAnchors()
           pass:setColor(options.joint_anchor_color)
-          pass:sphere(vec3(x1, y1, z1), options.joint_anchor_size, options.geometry_segments)
-          pass:sphere(vec3(x2, y2, z2), options.joint_anchor_size, options.geometry_segments)
+          pass:sphere(x1, y1, z1, options.joint_anchor_size, options.geometry_segments)
+          pass:sphere(x2, y2, z2, options.joint_anchor_size, options.geometry_segments)
           pass:setColor(options.joint_label_color)
           local pose = mat4(x1, y1, z1):scale(options.joint_label_size)
           pass:text(joint_type, pose)
@@ -357,60 +352,67 @@ function m.drawJoints(pass, world)
           local x1, y1, z1 = colliderA:getPosition()
           local x2, y2, z2 = colliderB:getPosition()
           pass:setColor(options.joint_axis_color)
-          pass:line(vec3(x1, y1, z1), -- line from anchor down the axis
-                    vec3(ax, ay, az):mul(options.joint_line_size):add(x1, y1, z1))
+          local ex, ey, ez = (vector(ax, ay, az) * options.joint_line_size + vector(x1, y1, z1)):unpack()
+          pass:line(x1, y1, z1, ex, ey, ez)
           pass:setColor(options.joint_label_color)
-          local pose = mat4():target(vec3(x1, y1, z1):lerp(x2, y2, z2, 0.5), vec3(x2, y2, z2)):rotate(-math.pi/2, 0,1,0)
+          local mid = vector(x1, y1, z1):lerp(vector(x2, y2, z2), 0.5)
+          local pose = mat4():target(mid, vector(x2, y2, z2)):rotate(-math.pi / 2, 0, 1, 0)
           pass:text(joint_type, pose:scale(options.joint_label_size))
         elseif joint_type == 'distance' then
-          local x1, y1, z1,  x2, y2, z2 = joint:getAnchors()
+          local x1, y1, z1, x2, y2, z2 = joint:getAnchors()
           pass:setColor(options.joint_anchor_color)
-          pass:sphere(vec3(x1, y1, z1), options.joint_anchor_size, options.geometry_segments)
-          pass:sphere(vec3(x2, y2, z2), options.joint_anchor_size, options.geometry_segments)
+          pass:sphere(x1, y1, z1, options.joint_anchor_size, options.geometry_segments)
+          pass:sphere(x2, y2, z2, options.joint_anchor_size, options.geometry_segments)
           pass:setColor(options.joint_axis_color)
-          pass:line(vec3(x1, y1, z1):lerp(x2, y2, z2, 0.05),
-                    vec3(x1, y1, z1):lerp(x2, y2, z2, 0.95))
+          local a = vector(x1, y1, z1):lerp(vector(x2, y2, z2), 0.05)
+          local b = vector(x1, y1, z1):lerp(vector(x2, y2, z2), 0.95)
+          local ax1, ay1, az1 = a:unpack()
+          local bx1, by1, bz1 = b:unpack()
+          pass:line(ax1, ay1, az1, bx1, by1, bz1)
           pass:setColor(options.joint_label_color)
           local pose = mat4()
-          pose:target(vec3(x1, y1, z1):lerp(x2, y2, z2, 0.5), vec3(x2, y2, z2))
-          pose:rotate(-math.pi/2, 0,1,0)
+          pose:target(vector(x1, y1, z1):lerp(vector(x2, y2, z2), 0.5), vector(x2, y2, z2))
+          pose:rotate(-math.pi / 2, 0, 1, 0)
           pass:text(joint_type, pose:scale(options.joint_label_size))
         elseif joint_type == 'hinge' then
-          local x1, y1, z1,  x2, y2, z2 = joint:getAnchors()
+          local x1, y1, z1, x2, y2, z2 = joint:getAnchors()
           local ax, ay, az = joint:getAxis()
           local angle = joint:getAngle()
           pass:setColor(options.joint_anchor_color)
-          pass:sphere(vec3(x1, y1, z1), options.joint_anchor_size, options.geometry_segments)
-          pass:sphere(vec3(x2, y2, z2), options.joint_anchor_size, options.geometry_segments)
+          pass:sphere(x1, y1, z1, options.joint_anchor_size, options.geometry_segments)
+          pass:sphere(x2, y2, z2, options.joint_anchor_size, options.geometry_segments)
           pass:setColor(options.joint_axis_color)
-          local end_axis = vec3(ax, ay, az):mul(options.joint_line_size):add(x1, y1, z1)
-          pass:line(vec3(x1, y1, z1),  -- line from anchor down the axis
-                    end_axis)
+          local end_axis = vector(ax, ay, az) * options.joint_line_size + vector(x1, y1, z1)
+          local ex, ey, ez = end_axis:unpack()
+          pass:line(x1, y1, z1, ex, ey, ez)
           pass:setColor(options.joint_label_color)
-          local pose = mat4(end_axis,  -angle, ax, ay, az)
+          local pose = mat4(end_axis, -angle, ax, ay, az)
           pass:text(joint_type, pose:scale(options.joint_label_size))
         elseif joint_type == 'weld' then
-          local x1, y1, z1,  x2, y2, z2 = joint:getAnchors()
+          local x1, y1, z1, x2, y2, z2 = joint:getAnchors()
           pass:setColor(options.joint_anchor_color)
-          pass:sphere(vec3(x1, y1, z1), options.joint_anchor_size, options.geometry_segments)
-          pass:sphere(vec3(x2, y2, z2), options.joint_anchor_size, options.geometry_segments)
+          pass:sphere(x1, y1, z1, options.joint_anchor_size, options.geometry_segments)
+          pass:sphere(x2, y2, z2, options.joint_anchor_size, options.geometry_segments)
           pass:setColor(options.joint_axis_color)
-          pass:line(vec3(x1, y1, z1):lerp(x2, y2, z2, 0.05),
-                    vec3(x1, y1, z1):lerp(x2, y2, z2, 0.95))
+          local a = vector(x1, y1, z1):lerp(vector(x2, y2, z2), 0.05)
+          local b = vector(x1, y1, z1):lerp(vector(x2, y2, z2), 0.95)
+          local ax1, ay1, az1 = a:unpack()
+          local bx1, by1, bz1 = b:unpack()
+          pass:line(ax1, ay1, az1, bx1, by1, bz1)
           pass:setColor(options.joint_label_color)
-          local pose = mat4(vec3(x1, y1, z1):lerp(x2, y2, z2, 0.5), colliderA:getOrientation())
+          local pose = mat4(vector(x1, y1, z1):lerp(vector(x2, y2, z2), 0.5), colliderA:getOrientation())
           pass:text(joint_type, pose:scale(options.joint_label_size))
         elseif joint_type == 'cone' then
           local ax, ay, az = joint:getAxis()
           local x1, y1, z1 = colliderA:getPosition()
           local x2, y2, z2 = colliderB:getPosition()
           pass:setColor(options.joint_axis_color)
-          pass:line(vec3(x1, y1, z1), -- line from anchor down the axis
-                    vec3(ax, ay, az):mul(options.joint_line_size):add(x1, y1, z1))
+          local ex, ey, ez = (vector(ax, ay, az) * options.joint_line_size + vector(x1, y1, z1)):unpack()
+          pass:line(x1, y1, z1, ex, ey, ez)
           pass:setColor(options.joint_label_color)
-          local pose = mat4():target(vec3(x1, y1, z1), vec3(x1 + ax, y1 + ay, z1 + az))
-          if vec3(x2, y2, z2):sub(x1, y1, z1):dot(ax, ay, az) > 0 then
-            pose:rotate(math.pi, 0,1,0)
+          local pose = mat4():target(vector(x1, y1, z1), vector(x1 + ax, y1 + ay, z1 + az))
+          if (vector(x2, y2, z2) - vector(x1, y1, z1)):dot(vector(ax, ay, az)) > 0 then
+            pose:rotate(math.pi, 0, 1, 0)
           end
           pass:text(joint_type, mat4(pose):scale(options.joint_label_size))
           pose:translate(0, 0, options.joint_line_size)
@@ -426,13 +428,16 @@ end
 function m.drawVelocities(pass, world)
   local options = m.options
   for _, collider in ipairs(world:getColliders()) do
-    local pos = vec3(collider:getPosition())
-    local vel = vec3(collider:getLinearVelocity())
+    local pos = vector(collider:getPosition())
+    local vel = vector(collider:getLinearVelocity())
     local mag = vel:length()
     pass:setColor(options.velocity_color)
-    local pose = mat4():target(vel:mul(options.velocity_sensitivity) + pos, pos)
-    pass:line(pos, vec3(pose))
+    local tip = pos + vel * options.velocity_sensitivity
+    local x1, y1, z1 = pos:unpack()
+    local x2, y2, z2 = tip:unpack()
+    pass:line(x1, y1, z1, x2, y2, z2)
     if mag > 1e-3 then
+      local pose = mat4():target(tip, pos)
       pose:scale(options.velocity_arrow_size, options.velocity_arrow_size, -options.velocity_arrow_size * 2)
       pass:cone(pose, options.geometry_segments)
     end
@@ -444,39 +449,40 @@ function m.drawAngulars(pass, world)
   local options = m.options
   local pose = mat4()
   for _, collider in ipairs(world:getColliders()) do
-    local ang = vec3(collider:getAngularVelocity()):mul(options.angular_sensitivity)
+    local ang = vector(collider:getAngularVelocity()) * options.angular_sensitivity
+    local ax, ay, az = ang:unpack()
      -- X axis
     pass:setColor(options.angular_x_color)
     pose:set(collider:getPose()) -- arc
-    pose:rotate(math.pi / 2, 0,1,0)
-    pass:circle(pose:scale(options.angular_gizmo_size), 'line', 0, ang[1], options.geometry_segments)
+    pose:rotate(math.pi / 2, 0, 1, 0)
+    pass:circle(pose:scale(options.angular_gizmo_size), 'line', 0, ax, options.geometry_segments)
     pose:set(collider:getPose()) -- arrow
-    pose:rotate(ang[1], 1,0,0)
+    pose:rotate(ax, 1, 0, 0)
     pose:translate(0, 0, -options.angular_gizmo_size)
-    pose:rotate(-math.pi / 2, 1,0,0)
-    pose:scale(options.angular_gizmo_size, options.angular_gizmo_size, options.angular_gizmo_size * 2 * (ang[1] < 0 and 1 or -1)):scale(0.1)
+    pose:rotate(-math.pi / 2, 1, 0, 0)
+    pose:scale(options.angular_gizmo_size, options.angular_gizmo_size, options.angular_gizmo_size * 2 * (ax < 0 and 1 or -1)):scale(0.1)
     pass:cone(pose, options.geometry_segments)
      -- Y axis
     pass:setColor(options.angular_y_color)
     pose:set(collider:getPose())  -- arc
-    pose:rotate(-math.pi / 2, 1,0,0)
-    pass:circle(pose:scale(options.angular_gizmo_size), 'line', 0, ang[2], options.geometry_segments)
+    pose:rotate(-math.pi / 2, 1, 0, 0)
+    pass:circle(pose:scale(options.angular_gizmo_size), 'line', 0, ay, options.geometry_segments)
     pose:set(collider:getPose()) -- arrow
-    pose:rotate(math.pi, 0,1,0)
-    pose:rotate(ang[2], 0,1,0)
+    pose:rotate(math.pi, 0, 1, 0)
+    pose:rotate(ay, 0, 1, 0)
     pose:translate(-options.angular_gizmo_size, 0, 0)
-    pose:scale(options.angular_gizmo_size, options.angular_gizmo_size, options.angular_gizmo_size * 2 * (ang[2] < 0 and 1 or -1)):scale(0.1)
+    pose:scale(options.angular_gizmo_size, options.angular_gizmo_size, options.angular_gizmo_size * 2 * (ay < 0 and 1 or -1)):scale(0.1)
     pass:cone(pose, options.geometry_segments)
      -- Z axis
     pass:setColor(options.angular_z_color)
     pose:set(collider:getPose()) -- arc
-    pose:rotate(math.pi / 2, 0,0,1)
-    pass:circle(pose:scale(options.angular_gizmo_size), 'line', 0, ang[3], options.geometry_segments)
+    pose:rotate(math.pi / 2, 0, 0, 1)
+    pass:circle(pose:scale(options.angular_gizmo_size), 'line', 0, az, options.geometry_segments)
     pose:set(collider:getPose()) -- arrow
-    pose:rotate(ang[3], 0,0,1)
+    pose:rotate(az, 0, 0, 1)
     pose:translate(0, options.angular_gizmo_size, 0)
-    pose:rotate(-math.pi / 2, 0,1,0)
-    pose:scale(options.angular_gizmo_size, options.angular_gizmo_size, options.angular_gizmo_size * 2 * (ang[3] < 0 and 1 or -1)):scale(0.1)
+    pose:rotate(-math.pi / 2, 0, 1, 0)
+    pose:scale(options.angular_gizmo_size, options.angular_gizmo_size, options.angular_gizmo_size * 2 * (az < 0 and 1 or -1)):scale(0.1)
     pass:cone(pose, options.geometry_segments)
   end
 end
@@ -522,8 +528,8 @@ function m.xray(pass, world, resolution)
   local world_from_screen = view_pose:mul(view_proj:invert()):mul(clip_from_screen)
   for sx = 0, w, w * resolution do
     for sy = 0, h, h * resolution do
-      local origin = world_from_screen * vec3(sx, sy, NEAR_PLANE / NEAR_PLANE)
-      local target = world_from_screen * vec3(sx, sy, NEAR_PLANE / 100)
+      local origin = world_from_screen * vector(sx, sy, NEAR_PLANE / NEAR_PLANE)
+      local target = world_from_screen * vector(sx, sy, NEAR_PLANE / 100)
       local collider, shape, x, y, z, nx, ny, nz, f = world:raycast(origin, target)
       if collider then
         pass:cube(x, y, z, resolution)
