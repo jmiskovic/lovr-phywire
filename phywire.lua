@@ -61,7 +61,7 @@ m.shape_colors = {} -- maps a shape to a specific color
 m.meshFromConvex = {} -- maps convex shapes to their extracted meshes
 m.next_color_index = 1 -- index of last chosen palette color
 m.shown_warning = false
-m.specified_draw_fns = setmetatable({}, { __mode = "k" }) -- maps shapes or colliders to custom draw functions
+m.specified_draw_fns = {} -- maps shapes or colliders to custom draw functions
 
 
 local aabb_points = {}
@@ -116,7 +116,7 @@ end
 
 function m.setDraw(shape_or_collider, draw_fn)
   assert(shape_or_collider.getType or shape_or_collider.getShapes,
-    'setColor must receive Shape or Collider instance as 1st argument')
+    'setDraw must receive Shape or Collider instance as 1st argument')
   m.specified_draw_fns[shape_or_collider] = draw_fn
 end
 
@@ -138,9 +138,9 @@ function m.fromConvexShape(shape)
     local normals = {} -- maps vertex index to list of normals of adjacent faces
     for i = 1, #indices, 3 do
       local vi1, vi2, vi3 = indices[i], indices[i + 1], indices[i + 2]
-      local v1 = vector(table.unpack(vertices[vi1]))
-      local v2 = vector(table.unpack(vertices[vi2]))
-      local v3 = vector(table.unpack(vertices[vi3]))
+      local v1 = vector(unpack(vertices[vi1]))
+      local v2 = vector(unpack(vertices[vi2]))
+      local v3 = vector(unpack(vertices[vi3]))
       local fnormal = (v2 - v1):cross(v3 - v1):normalize()
       normals[vi1] = normals[vi1] or {}
       normals[vi2] = normals[vi2] or {}
